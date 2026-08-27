@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f5f1e8" />
+  <meta name="description" content="MazeDocs is a free student document toolkit for merging, organizing, compressing, scanning, OCR, and assignment building." />
+  <title>MazeDocs — Student Utility OS</title>
+
+  <link rel="icon" href="assets/mazedocs-mark.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/dist/lenis.min.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+
+<body>
+  <noscript class="noscript">MazeDocs requires JavaScript to process files in your browser.</noscript>
+
+  <header class="topbar window-chrome">
+    <a class="brand" href="#home" aria-label="MazeDocs home">
+      <img src="assets/mazedocs-mark.svg" alt="" />
+      <span>
+        <strong>MazeDocs</strong>
+        <small>Student file toolbox</small>
+      </span>
+    </a>
+
+    <div class="privacy-chip">
+      <i></i>
+      <span>PRIVATE MODE</span>
+      <b>Files stay in your browser</b>
+    </div>
+
+    <button class="topbar__tools" id="open-tools-button" type="button">
+      Open tools <span>↓</span>
+    </button>
+  </header>
+
+  <div class="screen-noise" aria-hidden="true"></div>
+
+  <main>
+    <section class="hero" id="home">
+      <div class="hero__rail">
+        <span>MAZEDOCS CAMPUS OS / V1</span>
+        <span>UTILITY MODE · LOCAL FIRST</span>
+      </div>
+
+      <div class="hero__grid">
+        <div class="hero__copy">
+          <p class="eyebrow">Student utility operating system</p>
+
+          <h1>
+            <span>YOUR FILES.</span>
+            <span class="hero__accent">ONE DESK.</span>
+            <span>ZERO PAYWALLS.</span>
+          </h1>
+
+          <p class="hero__lede">
+            A playful browser-based utility desk for the document chores students do every day — merge, reorder, compress, scan, OCR, and build one final submission.
+          </p>
+
+          <div class="hero__actions">
+            <button class="button button--primary" id="hero-tools-button" type="button">
+              Choose a tool <span>↘</span>
+            </button>
+            <span>Free to use · Local-first processing</span>
+          </div>
+        </div>
+
+        <div class="hero__visual" aria-hidden="true">
+          <div class="paper-stack">
+            <div class="paper-sheet paper-sheet--back">
+              <span>LECTURE</span><strong>03</strong>
+            </div>
+            <div class="paper-sheet paper-sheet--middle">
+              <span>ACTIVITY</span><strong>07</strong>
+            </div>
+            <div class="paper-sheet paper-sheet--front">
+              <span>FINAL.PDF</span>
+              <div class="paper-lines"><i></i><i></i><i></i><i></i></div>
+              <div class="paper-stamp">READY</div>
+            </div>
+          </div>
+
+          <div class="hero-tab hero-tab--one">MERGE</div>
+          <div class="hero-tab hero-tab--two">OCR</div>
+          <div class="hero-tab hero-tab--three">SCAN</div>
+        </div>
+      </div>
+
+      <div class="hero__footer">
+        <span>PDF</span>
+        <span>JPG / PNG / WEBP</span>
+        <span>OCR</span>
+        <span>CAMERA READY</span>
+      </div>
+    </section>
+
+    <section class="tool-index campus-window" id="tools">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">01 / Utility Launcher</p>
+          <h2>Pick a utility.</h2>
+        </div>
+        <p>
+          Each tool opens like its own mini app. Your files stay local whenever the browser can handle the job.
+        </p>
+      </div>
+
+      <div class="tool-grid">
+        <button class="tool-card is-active" type="button" data-tool="merge">
+          <span>01</span><strong>Merge PDF</strong><p>Combine multiple PDFs into one file.</p><i>↗</i>
+        </button>
+
+        <button class="tool-card" type="button" data-tool="organize">
+          <span>02</span><strong>Organize PDF</strong><p>Reorder, rotate, delete, and extract pages.</p><i>↗</i>
+        </button>
+
+        <button class="tool-card" type="button" data-tool="compress">
+          <span>03</span><strong>Compress PDF</strong><p>Shrink large PDFs for LMS upload limits.</p><i>↗</i>
+        </button>
+
+        <button class="tool-card" type="button" data-tool="images">
+          <span>04</span><strong>Images → PDF</strong><p>Turn screenshots or photos into one PDF.</p><i>↗</i>
+        </button>
+
+        <button class="tool-card" type="button" data-tool="scan">
+          <span>05</span><strong>Scan to PDF</strong><p>Use your phone camera to create a document.</p><i>↗</i>
+        </button>
+
+        <button class="tool-card" type="button" data-tool="ocr">
+          <span>06</span><strong>Extract Text</strong><p>OCR screenshots, notes, and scanned PDFs.</p><i>↗</i>
+        </button>
+
+        <button class="tool-card tool-card--wide" type="button" data-tool="assignment">
+          <span>07</span>
+          <div>
+            <strong>Assignment Builder</strong>
+            <p>Mix PDFs and images, reorder everything, then export one submission-ready PDF.</p>
+          </div>
+          <i>↗</i>
+        </button>
+      </div>
+    </section>
+
+    <section class="workspace campus-workbench" id="workspace">
+      <div class="workspace__topbar">
+        <div class="window-dots" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </div>
+        <div>
+          <span class="mono-label">ACTIVE TOOL</span>
+          <strong id="workspace-title">Merge PDF</strong>
+        </div>
+        <button class="button button--quiet" id="reset-tool-button" type="button">Reset tool</button>
+      </div>
+
+      <section class="tool-panel is-active" data-tool-panel="merge">
+        <div class="tool-panel__intro">
+          <div><span class="mono-label">PDF / MERGE</span><h3>Combine PDFs.</h3></div>
+          <p>Add two or more PDFs. Drag them into the order you want, then build one final document.</p>
+        </div>
+
+        <input id="merge-input" type="file" accept="application/pdf" multiple hidden />
+
+        <div class="drop-area" id="merge-drop">
+          <div class="drop-area__icon">+</div>
+          <strong>Drop PDF files here</strong>
+          <span>or choose files from your device</span>
+          <button class="button button--primary" id="merge-choose-button" type="button">Choose PDFs</button>
+        </div>
+
+        <div class="file-list" id="merge-list"></div>
+
+        <div class="action-bar" id="merge-actions" hidden>
+          <div><span id="merge-count">0 files</span><small>Drag items to reorder</small></div>
+          <button class="button button--primary" id="merge-build-button" type="button">Build merged PDF</button>
+        </div>
+      </section>
+
+      <section class="tool-panel" data-tool-panel="organize" hidden>
+        <div class="tool-panel__intro">
+          <div><span class="mono-label">PDF / ORGANIZE</span><h3>Fix the page order.</h3></div>
+          <p>Upload one PDF, then drag pages around, rotate them, delete unwanted pages, or export only selected pages.</p>
+        </div>
+
+        <input id="organize-input" type="file" accept="application/pdf" hidden />
+
+        <div class="drop-area drop-area--compact" id="organize-drop">
+          <div><strong>Choose one PDF</strong><span>We will render its pages below.</span></div>
+          <button class="button button--primary" id="organize-choose-button" type="button">Select PDF</button>
+        </div>
+
+        <div class="page-grid" id="organize-pages"></div>
+
+        <div class="action-bar" id="organize-actions" hidden>
+          <div><span id="organize-summary">0 pages</span><small>Select pages if you only want to extract some</small></div>
+          <div class="action-bar__buttons">
+            <button class="button button--quiet" id="organize-export-selected-button" type="button">Export selected</button>
+            <button class="button button--primary" id="organize-export-all-button" type="button">Export organized PDF</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="tool-panel" data-tool-panel="compress" hidden>
+        <div class="tool-panel__intro">
+          <div><span class="mono-label">PDF / COMPRESS</span><h3>Make it smaller.</h3></div>
+          <p>MazeDocs visually rebuilds each PDF page as a compressed image. Useful for LMS limits, but selectable text is flattened.</p>
+        </div>
+
+        <input id="compress-input" type="file" accept="application/pdf" hidden />
+
+        <div class="drop-area drop-area--compact" id="compress-drop">
+          <div>
+            <strong id="compress-file-name">Choose a PDF to compress</strong>
+            <span id="compress-file-meta">Best for scanned or image-heavy PDFs.</span>
+          </div>
+          <button class="button button--primary" id="compress-choose-button" type="button">Select PDF</button>
+        </div>
+
+        <div class="settings-card" id="compress-settings" hidden>
+          <div class="settings-card__row">
+            <div><span class="mono-label">QUALITY</span><strong id="compress-quality-label">72%</strong></div>
+            <input id="compress-quality" type="range" min="40" max="90" value="72" />
+          </div>
+
+          <div class="quality-scale"><span>Smaller file</span><span>Sharper pages</span></div>
+          <button class="button button--primary button--full" id="compress-build-button" type="button">Compress PDF</button>
+        </div>
+      </section>
+
+      <section class="tool-panel" data-tool-panel="images" hidden>
+        <div class="tool-panel__intro">
+          <div><span class="mono-label">IMAGE / PDF</span><h3>Photos into pages.</h3></div>
+          <p>Add screenshots, worksheets, or photos and combine them into one PDF in the exact order you need.</p>
+        </div>
+
+        <input id="images-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+
+        <div class="drop-area" id="images-drop">
+          <div class="drop-area__icon">+</div>
+          <strong>Drop images here</strong>
+          <span>JPG · PNG · WEBP</span>
+          <button class="button button--primary" id="images-choose-button" type="button">Choose images</button>
+        </div>
+
+        <div class="image-grid" id="images-list"></div>
+
+        <div class="action-bar" id="images-actions" hidden>
+          <div><span id="images-count">0 images</span><small>Drag images to reorder</small></div>
+          <button class="button button--primary" id="images-build-button" type="button">Build PDF</button>
+        </div>
+      </section>
+
+      <section class="tool-panel" data-tool-panel="scan" hidden>
+        <div class="tool-panel__intro">
+          <div><span class="mono-label">CAMERA / PDF</span><h3>Scan from your phone.</h3></div>
+          <p>Capture pages with your phone camera, add as many as you need, then build a clean PDF without uploading them anywhere.</p>
+        </div>
+
+        <input id="scan-input" type="file" accept="image/*" capture="environment" multiple hidden />
+
+        <div class="scan-launch">
+          <div class="scan-launch__graphic"><div class="scan-frame"><span></span></div></div>
+
+          <div>
+            <span class="mono-label">MOBILE CAMERA</span>
+            <h4>Add document pages.</h4>
+            <p>On supported phones, this button opens the rear camera. You can also choose existing photos.</p>
+            <button class="button button--primary" id="scan-camera-button" type="button">Open camera / photos</button>
+          </div>
+        </div>
+
+        <div class="image-grid" id="scan-list"></div>
+
+        <div class="action-bar" id="scan-actions" hidden>
+          <label class="toggle-row">
+            <input id="scan-grayscale" type="checkbox" />
+            <span>Convert pages to grayscale</span>
+          </label>
+          <button class="button button--primary" id="scan-build-button" type="button">Save scanned PDF</button>
+        </div>
+      </section>
+
+      <section class="tool-panel" data-tool-panel="ocr" hidden>
+        <div class="tool-panel__intro">
+          <div><span class="mono-label">OCR / TEXT</span><h3>Turn pixels into notes.</h3></div>
+          <p>Upload an image or PDF. MazeDocs reads visible text in your browser using OCR and gives you editable output.</p>
+        </div>
+
+        <input id="ocr-input" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden />
+
+        <div class="drop-area drop-area--compact" id="ocr-drop">
+          <div>
+            <strong id="ocr-file-name">Choose an image or PDF</strong>
+            <span>OCR can take a little while on multi-page PDFs.</span>
+          </div>
+          <button class="button button--primary" id="ocr-choose-button" type="button">Select file</button>
+        </div>
+
+        <div class="ocr-progress" id="ocr-progress" hidden>
+          <div><span id="ocr-status">Preparing OCR</span><strong id="ocr-percent">0%</strong></div>
+          <div class="progress-track"><i id="ocr-progress-fill"></i></div>
+        </div>
+
+        <div class="ocr-result" id="ocr-result" hidden>
+          <div class="ocr-result__toolbar">
+            <span class="mono-label">EXTRACTED TEXT</span>
+            <div>
+              <button class="button button--quiet" id="ocr-copy-button" type="button">Copy text</button>
+              <button class="button button--primary" id="ocr-download-button" type="button">Download TXT</button>
+            </div>
+          </div>
+
+          <textarea id="ocr-output" spellcheck="false"></textarea>
+        </div>
+      </section>
+
+      <section class="tool-panel" data-tool-panel="assignment" hidden>
+        <div class="tool-panel__intro">
+          <div><span class="mono-label">ASSIGNMENT / BUILD</span><h3>One clean submission.</h3></div>
+          <p>Mix PDFs with screenshots and photos. Reorder them, then export everything into one assignment-ready PDF.</p>
+        </div>
+
+        <input id="assignment-input" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple hidden />
+
+        <div class="drop-area" id="assignment-drop">
+          <div class="drop-area__icon">+</div>
+          <strong>Drop assignment files here</strong>
+          <span>PDF · JPG · PNG · WEBP</span>
+          <button class="button button--primary" id="assignment-choose-button" type="button">Choose files</button>
+        </div>
+
+        <div class="assignment-list" id="assignment-list"></div>
+
+        <div class="assignment-export" id="assignment-actions" hidden>
+          <label>
+            <span class="mono-label">OUTPUT FILE NAME</span>
+            <input id="assignment-name" type="text" value="assignment-final" maxlength="70" />
+          </label>
+
+          <button class="button button--primary" id="assignment-build-button" type="button">Build assignment PDF</button>
+        </div>
+      </section>
+
+      <div class="processing-overlay" id="processing-overlay" hidden>
+        <div class="processing-overlay__card">
+          <span class="mono-label">MAZEDOCS / WORKING</span>
+          <h3 id="processing-title">Building your file.</h3>
+          <p id="processing-detail">Processing locally in your browser.</p>
+          <div class="processing-line"><i></i></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="privacy-section campus-banner">
+      <div class="privacy-section__number">02</div>
+
+      <div class="privacy-section__copy">
+        <p class="eyebrow">Built around student reality</p>
+        <h2>No account.<br />No daily limit.<br />No premium button.</h2>
+      </div>
+
+      <div class="privacy-section__notes">
+        <article>
+          <span>01</span><strong>Local-first</strong>
+          <p>Core PDF and image tools run directly inside your browser.</p>
+        </article>
+
+        <article>
+          <span>02</span><strong>Phone-ready</strong>
+          <p>Large touch targets, camera input, and layouts designed for students on mobile.</p>
+        </article>
+
+        <article>
+          <span>03</span><strong>Actually free</strong>
+          <p>MazeDocs does not lock basic school-file tasks behind a subscription.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div>
+      <img src="assets/mazedocs-mark.svg" alt="" />
+      <div><strong>MazeDocs</strong><span>Free student document tools.</span></div>
+    </div>
+
+    <div>
+      <span>V1</span><span>LOCAL-FIRST</span><span>STUDENT UTILITY OS</span><span>READY</span>
+    </div>
+
+    <a href="#home">Back to top ↑</a>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
