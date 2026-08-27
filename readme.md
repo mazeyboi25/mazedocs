@@ -103,3 +103,4 @@ The interface is optimized for phone widths including:
 - 430 × 932
 
 The Scan tool uses `capture="environment"` where supported so phones can open the rear camera.
+## v1
