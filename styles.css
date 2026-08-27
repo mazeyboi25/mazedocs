@@ -1883,3 +1883,413 @@ canvas {
     transition-duration: .001ms !important;
   }
 }
+
+/* ============================================================
+   MAZEDOCS — TEXT READABILITY UPDATE
+   Increases small labels/subtext without affecting headings.
+   ============================================================ */
+
+
+/* ------------------------------------------------------------
+   GENERAL SMALL LABELS
+   ------------------------------------------------------------ */
+
+.eyebrow,
+.mono-label {
+  font-size: 11px;
+  line-height: 1.45;
+  letter-spacing: 0.10em;
+
+  font-weight: 600;
+}
+
+
+/* ------------------------------------------------------------
+   TOP NAVIGATION
+   ------------------------------------------------------------ */
+
+.brand small {
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+
+.privacy-chip {
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+
+.topbar__tools {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+
+/* ------------------------------------------------------------
+   SCROLLING BLUE TICKER
+   ------------------------------------------------------------ */
+
+.utility-ticker__track {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.10em;
+}
+
+
+/* ------------------------------------------------------------
+   HERO SMALL TEXT
+   ------------------------------------------------------------ */
+
+.hero__rail {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+.hero__lede {
+  font-size: clamp(
+    15px,
+    1.15vw,
+    18px
+  );
+
+  line-height: 1.7;
+
+  color: #343640;
+}
+
+
+.hero__actions > span {
+  font-size: 10px;
+  line-height: 1.5;
+
+  color: #4d5060;
+}
+
+
+.hero__footer span {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+
+/* ------------------------------------------------------------
+   UTILITY LAUNCHER DESCRIPTION
+   ------------------------------------------------------------ */
+
+.section-heading > p {
+  max-width: 620px;
+
+  font-size: 14px;
+  line-height: 1.7;
+
+  color: #4e5160;
+}
+
+
+/* ------------------------------------------------------------
+   TOOL CARD NUMBERS
+   ------------------------------------------------------------ */
+
+.tool-card > span {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+
+/* ------------------------------------------------------------
+   TOOL CARD DESCRIPTIONS
+   ------------------------------------------------------------ */
+
+.tool-card p {
+  max-width: 360px;
+
+  margin-top: 12px;
+
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.55;
+
+  opacity: 0.82;
+}
+
+
+/*
+ * Keep text readable on the blue active card.
+ */
+
+.tool-card.is-active p {
+  color: rgba(
+    255,
+    255,
+    255,
+    0.92
+  );
+
+  opacity: 1;
+}
+
+
+.tool-card.is-active > span {
+  color: rgba(
+    255,
+    255,
+    255,
+    0.90
+  );
+}
+
+
+/* ------------------------------------------------------------
+   TOOL WORKSPACE DESCRIPTION
+   ------------------------------------------------------------ */
+
+.tool-panel__intro > p {
+  font-size: 14px;
+  line-height: 1.7;
+
+  color: #4d5060;
+}
+
+
+/* ------------------------------------------------------------
+   DROP AREAS
+   ------------------------------------------------------------ */
+
+.drop-area > span {
+  font-size: 12px;
+  line-height: 1.5;
+
+  color: #555866;
+}
+
+
+.drop-area--compact > div span {
+  font-size: 11px;
+  line-height: 1.5;
+
+  color: #555866;
+}
+
+
+/* ------------------------------------------------------------
+   FILE LISTS
+   ------------------------------------------------------------ */
+
+.file-row__info strong,
+.assignment-row__info strong {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+
+.file-row__info span,
+.assignment-row__info span {
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+
+.file-row__number,
+.assignment-row__number {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+
+.assignment-row__type {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+
+/* ------------------------------------------------------------
+   ACTION BARS
+   ------------------------------------------------------------ */
+
+.action-bar span {
+  font-size: 12px;
+}
+
+
+.action-bar small {
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+
+/* ------------------------------------------------------------
+   PDF PAGE CARDS
+   ------------------------------------------------------------ */
+
+.page-card__meta span,
+.image-card__footer span {
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+
+/* ------------------------------------------------------------
+   COMPRESSION SETTINGS
+   ------------------------------------------------------------ */
+
+.quality-scale {
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+
+/* ------------------------------------------------------------
+   SCAN TOOL
+   ------------------------------------------------------------ */
+
+.scan-launch p {
+  max-width: 580px;
+
+  font-size: 14px;
+  line-height: 1.7;
+
+  color: #41434e;
+}
+
+
+.toggle-row {
+  font-size: 11px;
+}
+
+
+/* ------------------------------------------------------------
+   OCR
+   ------------------------------------------------------------ */
+
+.ocr-progress > div:first-child {
+  font-size: 12px;
+}
+
+
+.ocr-progress strong {
+  font-size: 10px;
+}
+
+
+#ocr-output {
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+
+/* ------------------------------------------------------------
+   PRIVACY / BOTTOM SECTION
+   ------------------------------------------------------------ */
+
+.privacy-section__notes article > span {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+
+.privacy-section__notes strong {
+  font-size: 15px;
+}
+
+
+.privacy-section__notes p {
+  font-size: 12px;
+  line-height: 1.65;
+
+  color: #555866;
+}
+
+
+/* ------------------------------------------------------------
+   FOOTER
+   ------------------------------------------------------------ */
+
+.footer strong {
+  font-size: 14px;
+}
+
+
+.footer span,
+.footer a {
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   MOBILE READABILITY
+   ============================================================ */
+
+@media (max-width: 700px) {
+
+  .eyebrow,
+  .mono-label {
+    font-size: 9px;
+  }
+
+
+  .hero__rail {
+    font-size: 8px;
+  }
+
+
+  .hero__lede {
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+
+  .hero__actions > span {
+    font-size: 9px;
+  }
+
+
+  .hero__footer span {
+    font-size: 8px;
+  }
+
+
+  .section-heading > p {
+    font-size: 13px;
+  }
+
+
+  .tool-card > span {
+    font-size: 9px;
+  }
+
+
+  .tool-card p {
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+
+  .tool-panel__intro > p {
+    font-size: 12px;
+  }
+
+
+  .drop-area > span {
+    font-size: 11px;
+  }
+
+
+  .scan-launch p {
+    font-size: 12px;
+  }
+
+
+  #ocr-output {
+    font-size: 12px;
+  }
+
+
+  .privacy-section__notes p {
+    font-size: 11px;
+  }
+
+}
