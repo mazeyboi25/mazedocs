@@ -4496,7 +4496,7 @@
       state.libreOffice
     ) {
       routeNote.textContent =
-        "Full Railway conversion engine online · files up to 200 MB supported.";
+        "Full Railway conversion engine online · background conversion jobs enabled · files up to 200 MB supported.";
     }
     else {
       routeNote.textContent =
@@ -4983,7 +4983,7 @@
   }
 
 
-  function convertThroughRailway() {
+  function uploadConversionJob() {
     return new Promise(
       (resolve, reject) => {
         const form =
@@ -5008,18 +5008,13 @@
 
         request.open(
           "POST",
-          `${API_BASE}/api`,
+          `${API_BASE}/api/jobs`,
           true
         );
 
 
-        /*
-         * Railway returns the generated document directly.
-         * XHR gives MazeDocs upload-progress events while still
-         * allowing the response to be handled as a Blob.
-         */
         request.responseType =
-          "blob";
+          "text";
 
 
         request.upload.addEventListener(
@@ -5040,13 +5035,10 @@
         request.upload.addEventListener(
           "progress",
           (event) => {
-            if (
-              !event.lengthComputable
-            ) {
+            if (!event.lengthComputable) {
               setRunButton(
                 "Uploading…"
               );
-
 
               return;
             }
@@ -5082,12 +5074,12 @@
           "load",
           () => {
             setRunButton(
-              "Converting…"
+              "Starting conversion…"
             );
 
 
             setConversionMessage(
-              "Upload complete. MazeDocs is converting your file…"
+              "Upload complete. Starting the conversion job…"
             );
           }
         );
@@ -5095,46 +5087,31 @@
 
         request.addEventListener(
           "load",
-          async () => {
-            const responseBlob =
-              request.response
-              ||
-              new Blob();
+          () => {
+            let data = null;
+
+            try {
+              data = JSON.parse(
+                request.responseText
+                ||
+                "{}"
+              );
+            }
+            catch {
+              data = null;
+            }
 
 
             if (
               request.status >= 200
               &&
               request.status < 300
+              &&
+              data?.job_id
             ) {
-              const fallback =
-                `mazedocs-converted.${state.target}`;
-
-
-              const downloadName =
-                filenameFromXHR(
-                  request,
-                  fallback
-                );
-
-
-              setRunButton(
-                "Preparing download…"
+              resolve(
+                data.job_id
               );
-
-
-              setConversionMessage(
-                "Conversion complete. Preparing your download…"
-              );
-
-
-              downloadBlob(
-                responseBlob,
-                downloadName
-              );
-
-
-              resolve();
 
               return;
             }
@@ -5142,10 +5119,11 @@
 
             reject(
               new Error(
-                await errorMessageFromBlob(
-                  responseBlob,
-                  request.status
-                )
+                data?.detail
+                ||
+                data?.message
+                ||
+                `Could not start conversion (${request.status}).`
               )
             );
           }
@@ -5157,29 +5135,13 @@
           () => {
             reject(
               new Error(
-                "Could not reach the MazeDocs converter. Check your connection and try again."
+                "Could not upload the file to the MazeDocs converter."
               )
             );
           }
         );
 
 
-        request.addEventListener(
-          "abort",
-          () => {
-            reject(
-              new Error(
-                "The conversion upload was cancelled."
-              )
-            );
-          }
-        );
-
-
-        /*
-         * No artificial browser timeout.
-         * Railway's own platform/network limits remain authoritative.
-         */
         request.timeout =
           0;
 
@@ -5190,6 +5152,205 @@
       }
     );
   }
+
+
+  function wait(milliseconds) {
+    return new Promise(
+      (resolve) => {
+        window.setTimeout(
+          resolve,
+          milliseconds
+        );
+      }
+    );
+  }
+
+
+  function elapsedLabel(startedAt) {
+    const seconds =
+      Math.max(
+        0,
+        Math.floor(
+          (
+            Date.now()
+            -
+            startedAt
+          )
+          /
+          1000
+        )
+      );
+
+
+    const minutes =
+      Math.floor(
+        seconds /
+        60
+      );
+
+
+    const remainder =
+      seconds % 60;
+
+
+    if (minutes > 0) {
+      return `${minutes}m ${String(remainder).padStart(2, "0")}s`;
+    }
+
+
+    return `${seconds}s`;
+  }
+
+
+  async function waitForConversionJob(
+    jobId
+  ) {
+    const startedAt =
+      Date.now();
+
+
+    while (true) {
+      const response =
+        await fetch(
+          `${API_BASE}/api/jobs/${encodeURIComponent(jobId)}`,
+          {
+            cache:
+              "no-store"
+          }
+        );
+
+
+      const data =
+        await response.json().catch(
+          () => ({})
+        );
+
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail
+          ||
+          data.message
+          ||
+          `Could not read conversion status (${response.status}).`
+        );
+      }
+
+
+      if (
+        data.status ===
+        "done"
+      ) {
+        return data;
+      }
+
+
+      if (
+        data.status ===
+        "error"
+      ) {
+        throw new Error(
+          data.error
+          ||
+          "Conversion failed."
+        );
+      }
+
+
+      const elapsed =
+        elapsedLabel(
+          startedAt
+        );
+
+
+      setRunButton(
+        `Converting… ${elapsed}`
+      );
+
+
+      setConversionMessage(
+        `MazeDocs is rebuilding your ${state.source.toUpperCase()} as ${state.target.toUpperCase()} · ${elapsed}. Keep this tab open; the conversion is still running.`
+      );
+
+
+      await wait(
+        1800
+      );
+    }
+  }
+
+
+  function triggerJobDownload(
+    jobId,
+    filename
+  ) {
+    const link =
+      document.createElement(
+        "a"
+      );
+
+
+    link.href =
+      `${API_BASE}/api/jobs/${encodeURIComponent(jobId)}/download`;
+
+
+    if (filename) {
+      link.download =
+        filename;
+    }
+
+
+    link.rel =
+      "noopener";
+
+
+    document.body.appendChild(
+      link
+    );
+
+
+    link.click();
+    link.remove();
+  }
+
+
+  async function convertThroughRailway() {
+    const jobId =
+      await uploadConversionJob();
+
+
+    setRunButton(
+      "Converting… 0s"
+    );
+
+
+    setConversionMessage(
+      "Upload complete. MazeDocs is now converting the file in the background…"
+    );
+
+
+    const result =
+      await waitForConversionJob(
+        jobId
+      );
+
+
+    setRunButton(
+      "Downloading…"
+    );
+
+
+    setConversionMessage(
+      "Conversion complete. Your download is starting…"
+    );
+
+
+    triggerJobDownload(
+      jobId,
+      result.filename
+    );
+  }
+
 
 
   /* ==========================================================
