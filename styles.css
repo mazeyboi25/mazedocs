@@ -2671,3 +2671,262 @@ canvas {
   }
 
 }
+
+/* ============================================================
+   UNIVERSAL CONVERTER CARD — CLEAN V2 LAYOUT
+   ============================================================ */
+
+.converter-card {
+  position: relative;
+
+  display: block !important;
+
+  min-height: 180px;
+
+  padding:
+    58px
+    64px
+    24px
+    24px !important;
+
+  overflow: hidden;
+}
+
+
+/* ------------------------------------------------------------
+   TOOL NUMBER — 07
+   ------------------------------------------------------------ */
+
+.converter-card > span {
+  position: absolute;
+
+  top: 20px;
+  left: 24px;
+
+  margin: 0;
+
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+
+  color: rgba(
+    255,
+    255,
+    255,
+    0.90
+  );
+}
+
+
+/* ------------------------------------------------------------
+   V2 BADGE
+   ------------------------------------------------------------ */
+
+.converter-card::before {
+  content: "V2";
+
+  position: absolute;
+
+  top: 13px;
+  left: 54px;
+
+  right: auto;
+
+  min-width: 34px;
+  height: 28px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding:
+    0
+    8px;
+
+  border:
+    2px solid
+    var(--line);
+
+  border-radius: 8px;
+
+  background:
+    var(--lime);
+
+  color:
+    var(--ink);
+
+  font-family:
+    var(--mono);
+
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+
+  box-shadow:
+    3px
+    3px
+    0
+    var(--line);
+}
+
+
+/* ------------------------------------------------------------
+   TITLE / DESCRIPTION AREA
+   ------------------------------------------------------------ */
+
+.converter-card > div {
+  width: 100%;
+  max-width: 720px;
+}
+
+
+.converter-card strong {
+  display: block;
+
+  margin: 0 !important;
+
+  font-size:
+    clamp(
+      28px,
+      2.5vw,
+      38px
+    );
+
+  line-height: 1;
+
+  letter-spacing:
+    -0.045em;
+}
+
+
+.converter-card p {
+  max-width: 650px;
+
+  margin:
+    12px
+    0
+    0;
+
+  color:
+    rgba(
+      255,
+      255,
+      255,
+      0.88
+    );
+
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.55;
+
+  opacity: 1;
+}
+
+
+/* ------------------------------------------------------------
+   ARROW
+   ------------------------------------------------------------ */
+
+.converter-card > i {
+  position: absolute;
+
+  top: 18px;
+  right: 18px;
+
+  width: 34px;
+  height: 34px;
+
+  display: grid;
+  place-items: center;
+
+  margin: 0;
+
+  border:
+    2px solid
+    var(--line);
+
+  border-radius: 50%;
+
+  background:
+    white;
+
+  color:
+    var(--ink);
+
+  font-size: 13px;
+  font-style: normal;
+
+  box-shadow:
+    2px
+    2px
+    0
+    var(--line);
+}
+
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
+
+@media (max-width: 700px) {
+
+  .converter-card {
+    min-height: 195px;
+
+    padding:
+      60px
+      22px
+      24px
+      22px !important;
+  }
+
+
+  .converter-card > span {
+    top: 21px;
+    left: 22px;
+
+    font-size: 9px;
+  }
+
+
+  .converter-card::before {
+    top: 13px;
+    left: 50px;
+
+    min-width: 32px;
+    height: 27px;
+
+    font-size: 8px;
+  }
+
+
+  .converter-card > i {
+    top: 15px;
+    right: 16px;
+
+    width: 34px;
+    height: 34px;
+  }
+
+
+  .converter-card strong {
+    padding-right: 0;
+
+    font-size:
+      clamp(
+        27px,
+        8vw,
+        34px
+      );
+  }
+
+
+  .converter-card p {
+    max-width: none;
+
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+}
