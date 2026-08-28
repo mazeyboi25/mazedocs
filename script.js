@@ -1850,6 +1850,120 @@
   };
 
 }
+  function addImagesToState(
+    targetArray,
+    files
+  ) {
+    const supportedImages =
+      files.filter(
+        isImage
+      );
+
+
+    if (!supportedImages.length) {
+      showToast(
+        "Choose JPG, PNG, or WEBP images."
+      );
+
+      return;
+    }
+
+
+    supportedImages.forEach(
+      (file) => {
+        targetArray.push({
+          id:
+            makeId(),
+
+          file,
+
+          previewUrl:
+            URL.createObjectURL(
+              file
+            )
+        });
+      }
+    );
+  }
+
+
+  function revokePreview(item) {
+    if (
+      item?.previewUrl
+    ) {
+      URL.revokeObjectURL(
+        item.previewUrl
+      );
+    }
+  }
+
+
+  function createImageCard(
+    item,
+    index,
+    onRemove
+  ) {
+    const card =
+      document.createElement(
+        "article"
+      );
+
+
+    card.className =
+      "image-card";
+
+
+    card.dataset.id =
+      item.id;
+
+
+    card.innerHTML = `
+      <div class="image-card__preview">
+        <img alt="" />
+      </div>
+
+      <div class="image-card__footer">
+        <span></span>
+
+        <button
+          class="file-remove"
+          type="button"
+          aria-label="Remove image"
+        >
+          ×
+        </button>
+      </div>
+    `;
+
+
+    card
+      .querySelector("img")
+      .src =
+        item.previewUrl;
+
+
+    card
+      .querySelector(
+        ".image-card__footer span"
+      )
+      .textContent =
+        `${String(index + 1).padStart(2, "0")} · ${item.file.name}`;
+
+
+    card
+      .querySelector(
+        ".file-remove"
+      )
+      .addEventListener(
+        "click",
+        onRemove
+      );
+
+
+    return card;
+  }
+
+
   async function buildPdfFromImages(
   items,
   filename,
