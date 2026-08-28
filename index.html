@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f5f1e8" />
-  <meta name="description" content="MazeDocs is a free student document toolkit for merging, organizing, compressing, scanning, OCR, and assignment building." />
+  <meta name="description" content="MazeDocs is a free student document toolkit for PDF tools, scanning, OCR, image-to-PDF, and common file conversion." />
   <title>MazeDocs V2 — Student Utility OS</title>
 
   <link rel="icon" href="assets/mazedocs-mark.svg" type="image/svg+xml" />
@@ -142,7 +142,7 @@
         </button>
 
         <button class="tool-card tool-card--wide converter-card" type="button" data-tool="convert">
-          <span>08</span>
+          <span>07</span>
           <div>
             <strong>Universal Converter</strong>
             <p>PDF, Word, PowerPoint, spreadsheets, text, and images — convert common student file formats from one desk.</p>
@@ -244,7 +244,7 @@
           <p>Add screenshots, worksheets, or photos and combine them into one PDF in the exact order you need.</p>
         </div>
 
-        <input id="images-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+        <input id="images-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple hidden />
 
         <div class="drop-area" id="images-drop">
           <div class="drop-area__icon">+</div>
@@ -377,9 +377,23 @@
               <span class="mono-label">CONVERT TO</span>
               <strong>Choose an output format.</strong>
             </div>
-            <small id="converter-route-note"></small>
+            <small id="converter-route-note">Select the file type you want MazeDocs to create.</small>
           </div>
-          <div class="converter-target-grid" id="converter-target-grid"></div>
+
+          <div class="converter-format-picker">
+            <label for="converter-target-select">
+              <span class="mono-label">OUTPUT FILE TYPE</span>
+              <select id="converter-target-select">
+                <option value="">Choose a format…</option>
+              </select>
+            </label>
+
+            <div class="converter-format-detail">
+              <span class="mono-label">WHAT YOU GET</span>
+              <strong id="converter-target-label">Choose an output above.</strong>
+              <p id="converter-target-description">MazeDocs only shows formats that make sense for the source file.</p>
+            </div>
+          </div>
         </div>
 
         <div class="converter-action" id="converter-action" hidden>
@@ -395,23 +409,6 @@
           </button>
         </div>
 
-        <div class="converter-help">
-          <article>
-            <span>01</span>
-            <strong>PDF → Word</strong>
-            <p>Extracts editable text and available images into a DOCX. Complex page layouts may shift.</p>
-          </article>
-          <article>
-            <span>02</span>
-            <strong>PDF → PowerPoint</strong>
-            <p>Places each PDF page onto its own slide for strong visual fidelity.</p>
-          </article>
-          <article>
-            <span>03</span>
-            <strong>Legacy Office</strong>
-            <p>.doc, .ppt, and .xls use LibreOffice when the full engine is available.</p>
-          </article>
-        </div>
       </section>
 
       <div class="processing-overlay" id="processing-overlay" hidden>

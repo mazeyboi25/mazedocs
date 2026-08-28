@@ -57,11 +57,15 @@
 
 
   const isImage = (file) => {
-    return Boolean(
-      file?.type?.startsWith(
-        "image/"
-      )
-    );
+    if (!file) {
+      return false;
+    }
+
+    if (file.type?.startsWith("image/")) {
+      return true;
+    }
+
+    return /\.(jpe?g|png|webp)$/i.test(file.name || "");
   };
 
 
@@ -1579,403 +1583,398 @@
      ========================================================== */
 
   async function normalizeImageForPdf(
-  pdfDocument,
-  file,
-  grayscale = false
-) {
-
-  const dataUrl =
-    await fileToDataUrl(
-      file
-    );
-
-
-  const image =
-    await new Promise(
-      (resolve, reject) => {
-
-        const element =
-          new Image();
-
-
-        element.onload =
-          () => resolve(element);
-
-
-        element.onerror =
-          reject;
-
-
-        element.src =
-          dataUrl;
-
-      }
-    );
-
-
-  /*
-   * Limit extremely large images so the browser does not
-   * consume unnecessary memory.
-   *
-   * IMPORTANT:
-   * We keep the original aspect ratio.
-   */
-
-  const maximumDimension =
-    2600;
-
-
-  const resizeScale =
-    Math.min(
-      1,
-
-      maximumDimension /
-      Math.max(
-        image.naturalWidth,
-        image.naturalHeight
-      )
-    );
-
-
-  const width =
-    Math.max(
-      1,
-
-      Math.round(
-        image.naturalWidth *
-        resizeScale
-      )
-    );
-
-
-  const height =
-    Math.max(
-      1,
-
-      Math.round(
-        image.naturalHeight *
-        resizeScale
-      )
-    );
-
-
-  const canvas =
-    document.createElement(
-      "canvas"
-    );
-
-
-  canvas.width =
-    width;
-
-
-  canvas.height =
-    height;
-
-
-  /*
-   * Keep alpha support enabled.
-   *
-   * DO NOT use:
-   *
-   * { alpha: false }
-   *
-   * because that removes transparency.
-   */
-
-  const context =
-    canvas.getContext(
-      "2d",
-      {
-        alpha: true
-      }
-    );
-
-
-  /*
-   * IMPORTANT:
-   *
-   * Do NOT fill the canvas with white.
-   *
-   * The previous version had:
-   *
-   * context.fillStyle = "#ffffff";
-   * context.fillRect(...);
-   *
-   * That is what permanently created a white background.
-   */
-
-  context.clearRect(
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-
-  context.drawImage(
-    image,
-    0,
-    0,
-    width,
-    height
-  );
-
-
-  /*
-   * Optional grayscale mode.
-   *
-   * Used by the Scan tool.
-   */
-
-  if (grayscale) {
-
-    const imageData =
-      context.getImageData(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-      );
-
-
-    const pixels =
-      imageData.data;
-
-
-    for (
-      let index = 0;
-      index < pixels.length;
-      index += 4
-    ) {
-
-      const gray =
-        (
-          pixels[index] *
-          0.299
-        )
-        +
-        (
-          pixels[index + 1] *
-          0.587
-        )
-        +
-        (
-          pixels[index + 2] *
-          0.114
-        );
-
-
-      pixels[index] =
-        gray;
-
-
-      pixels[index + 1] =
-        gray;
-
-
-      pixels[index + 2] =
-        gray;
-
-    }
-
-
-    context.putImageData(
-      imageData,
-      0,
-      0
-    );
-
-  }
-
-
-  /*
-   * Convert everything through PNG.
-   *
-   * PNG is used instead of JPEG because:
-   *
-   * - PNG supports transparency
-   * - no artificial white background
-   * - works consistently for JPG / PNG / WEBP input
-   */
-
-  const pngDataUrl =
-    canvas.toDataURL(
-      "image/png"
-    );
-
-
-  const pngBytes =
-    await fetch(
-      pngDataUrl
-    ).then(
-      (response) =>
-        response.arrayBuffer()
-    );
-
-
-  const embedded =
-    await pdfDocument.embedPng(
-      pngBytes
-    );
-
-
-  return {
-
-    embedded,
-
-    width,
-
-    height
-
-  };
-
-}
-  async function buildPdfFromImages(
-  items,
-  filename,
-  grayscale = false
-) {
-
-  if (!items.length) {
-
-    showToast(
-      "Add at least one image."
-    );
-
-
-    return;
-
-  }
-
-
-  showProcessing(
-    "Building PDF.",
-    "Turning each image directly into a PDF page."
-  );
-
-
-  try {
-
-    const output =
-      await PDFLib.PDFDocument.create();
-
-
-    for (
-      let index = 0;
-      index < items.length;
-      index += 1
-    ) {
-
-      elements.processingDetail.textContent =
-        `Adding image ${index + 1} of ${items.length}.`;
-
-
-      const imageData =
-        await normalizeImageForPdf(
-          output,
-          items[index].file,
-          grayscale
-        );
-
-
-      /*
-       * ======================================================
-       * IMAGE-SIZED PDF PAGE
-       * ======================================================
-       *
-       * Instead of creating:
-       *
-       * 595 x 842 A4 page
-       *
-       * we make the PDF page EXACTLY match the image.
-       *
-       * This removes:
-       *
-       * - white borders
-       * - page margins
-       * - A4 padding
-       * - letterboxing
-       */
-
-
-      const pageWidth =
-        imageData.width;
-
-
-      const pageHeight =
-        imageData.height;
-
-
-      const page =
-        output.addPage([
-          pageWidth,
-          pageHeight
-        ]);
-
-
-      /*
-       * Image starts at the exact bottom-left corner
-       * and fills 100% of the PDF page.
-       */
-
-      page.drawImage(
-        imageData.embedded,
-        {
-
-          x:
-            0,
-
-          y:
-            0,
-
-          width:
-            pageWidth,
-
-          height:
-            pageHeight
-
+    pdfDocument,
+    file,
+    grayscale = false
+  ) {
+    const dataUrl =
+      await fileToDataUrl(file);
+
+
+    const image =
+      await new Promise(
+        (resolve, reject) => {
+          const element =
+            new Image();
+
+          element.onload =
+            () => resolve(element);
+
+          element.onerror =
+            reject;
+
+          element.src =
+            dataUrl;
         }
       );
 
+
+    const maximumDimension =
+      2600;
+
+
+    const resizeScale =
+      Math.min(
+        1,
+        maximumDimension /
+          Math.max(
+            image.naturalWidth,
+            image.naturalHeight
+          )
+      );
+
+
+    const width =
+      Math.max(
+        1,
+        Math.round(
+          image.naturalWidth *
+          resizeScale
+        )
+      );
+
+
+    const height =
+      Math.max(
+        1,
+        Math.round(
+          image.naturalHeight *
+          resizeScale
+        )
+      );
+
+
+    const canvas =
+      document.createElement(
+        "canvas"
+      );
+
+
+    canvas.width =
+      width;
+
+    canvas.height =
+      height;
+
+
+    const context =
+      canvas.getContext(
+        "2d",
+        {
+          alpha:
+            true
+        }
+      );
+
+
+    context.clearRect(
+      0,
+      0,
+      width,
+      height
+    );
+
+
+    context.drawImage(
+      image,
+      0,
+      0,
+      width,
+      height
+    );
+
+
+    if (grayscale) {
+      const imageData =
+        context.getImageData(
+          0,
+          0,
+          width,
+          height
+        );
+
+
+      const pixels =
+        imageData.data;
+
+
+      for (
+        let index = 0;
+        index < pixels.length;
+        index += 4
+      ) {
+        const gray =
+          pixels[index] *
+          0.299
+          +
+          pixels[index + 1] *
+          0.587
+          +
+          pixels[index + 2] *
+          0.114;
+
+
+        pixels[index] =
+          gray;
+
+        pixels[index + 1] =
+          gray;
+
+        pixels[index + 2] =
+          gray;
+      }
+
+
+      context.putImageData(
+        imageData,
+        0,
+        0
+      );
     }
 
 
-    const bytes =
-      await output.save();
+    const pngDataUrl =
+      canvas.toDataURL(
+        "image/png"
+      );
 
 
-    downloadBytes(
-      bytes,
-      filename,
-      "application/pdf"
-    );
+    const pngBytes =
+      await fetch(
+        pngDataUrl
+      ).then(
+        (response) =>
+          response.arrayBuffer()
+      );
 
 
-    showToast(
-      "PDF ready."
-    );
-
-  }
-  catch (error) {
-
-    console.error(
-      error
-    );
+    const embedded =
+      await pdfDocument.embedPng(
+        pngBytes
+      );
 
 
-    showToast(
-      "Could not build this PDF."
-    );
-
-  }
-  finally {
-
-    hideProcessing();
-
+    return {
+      embedded,
+      width,
+      height
+    };
   }
 
-}
+
+  function addImagesToState(
+    targetArray,
+    files
+  ) {
+    const supportedImages =
+      files.filter(
+        isImage
+      );
+
+
+    if (!supportedImages.length) {
+      showToast(
+        "Choose JPG, PNG, or WEBP images."
+      );
+
+      return;
+    }
+
+
+    supportedImages.forEach(
+      (file) => {
+        targetArray.push({
+          id:
+            makeId(),
+
+          file,
+
+          previewUrl:
+            URL.createObjectURL(
+              file
+            )
+        });
+      }
+    );
+  }
+
+
+  function revokePreview(item) {
+    if (
+      item?.previewUrl
+    ) {
+      URL.revokeObjectURL(
+        item.previewUrl
+      );
+    }
+  }
+
+
+  function createImageCard(
+    item,
+    index,
+    onRemove
+  ) {
+    const card =
+      document.createElement(
+        "article"
+      );
+
+
+    card.className =
+      "image-card";
+
+
+    card.dataset.id =
+      item.id;
+
+
+    card.innerHTML = `
+      <div class="image-card__preview">
+        <img alt="" />
+      </div>
+
+      <div class="image-card__footer">
+        <span></span>
+
+        <button
+          class="file-remove"
+          type="button"
+          aria-label="Remove image"
+        >
+          ×
+        </button>
+      </div>
+    `;
+
+
+    card
+      .querySelector("img")
+      .src =
+        item.previewUrl;
+
+
+    card
+      .querySelector(".image-card__footer span")
+      .textContent =
+        `${String(index + 1).padStart(2, "0")} · ${item.file.name}`;
+
+
+    card
+      .querySelector(".file-remove")
+      .addEventListener(
+        "click",
+        onRemove
+      );
+
+
+    return card;
+  }
+
+
+  async function buildPdfFromImages(
+    items,
+    filename,
+    grayscale = false
+  ) {
+    if (!items.length) {
+      showToast(
+        "Add at least one image."
+      );
+
+      return;
+    }
+
+
+    showProcessing(
+      "Building PDF.",
+      "Turning each image directly into a PDF page."
+    );
+
+
+    try {
+      const output =
+        await PDFLib.PDFDocument.create();
+
+
+      for (
+        let index = 0;
+        index < items.length;
+        index += 1
+      ) {
+        elements.processingDetail.textContent =
+          `Adding image ${index + 1} of ${items.length}.`;
+
+
+        const imageData =
+          await normalizeImageForPdf(
+            output,
+            items[index].file,
+            grayscale
+          );
+
+
+        /*
+         * The PDF page is exactly the image size.
+         * No A4 canvas, no margins, and no white padding.
+         */
+        const page =
+          output.addPage([
+            imageData.width,
+            imageData.height
+          ]);
+
+
+        page.drawImage(
+          imageData.embedded,
+          {
+            x:
+              0,
+
+            y:
+              0,
+
+            width:
+              imageData.width,
+
+            height:
+              imageData.height
+          }
+        );
+      }
+
+
+      const bytes =
+        await output.save();
+
+
+      downloadBytes(
+        bytes,
+        filename,
+        "application/pdf"
+      );
+
+
+      showToast(
+        "PDF ready."
+      );
+    }
+    catch (error) {
+      console.error(
+        error
+      );
+
+
+      showToast(
+        "Could not build this PDF."
+      );
+    }
+    finally {
+      hideProcessing();
+    }
+  }
+
+
   /* ==========================================================
      12. IMAGES → PDF
      ========================================================== */
@@ -3248,332 +3247,1660 @@
 
 /* ============================================================
    MAZEDOCS V2 — UNIVERSAL CONVERTER
-   Kept separate from the V1 tool controller so V1 remains stable.
+   Uses one stable /api endpoint for Vercel compatibility.
+   Output choices are defined locally so the picker always renders.
    ============================================================ */
 
 (() => {
   "use strict";
 
-  const $ = (selector) => document.querySelector(selector);
 
-  const converterInput = $("#converter-input");
-  const converterDrop = $("#converter-drop");
-  const chooseButton = $("#converter-choose-button");
-  const clearButton = $("#converter-clear-button");
-  const fileCard = $("#converter-file");
-  const fileExt = $("#converter-file-ext");
-  const fileName = $("#converter-file-name");
-  const fileMeta = $("#converter-file-meta");
-  const targets = $("#converter-targets");
-  const targetGrid = $("#converter-target-grid");
-  const routeNote = $("#converter-route-note");
-  const action = $("#converter-action");
-  const selectedRoute = $("#converter-selected-route");
-  const selectedDescription = $("#converter-selected-description");
-  const runButton = $("#converter-run-button");
-  const engineStatus = $("#converter-engine-status");
-  const resetButton = $("#reset-tool-button");
-  const toastElement = $("#toast");
+  const $ = (selector) => {
+    return document.querySelector(
+      selector
+    );
+  };
 
-  if (!converterInput) {
+
+  const converterInput =
+    $("#converter-input");
+
+  const converterDrop =
+    $("#converter-drop");
+
+  const chooseButton =
+    $("#converter-choose-button");
+
+  const clearButton =
+    $("#converter-clear-button");
+
+  const fileCard =
+    $("#converter-file");
+
+  const fileExt =
+    $("#converter-file-ext");
+
+  const fileName =
+    $("#converter-file-name");
+
+  const fileMeta =
+    $("#converter-file-meta");
+
+  const targets =
+    $("#converter-targets");
+
+  const targetSelect =
+    $("#converter-target-select");
+
+  const targetLabel =
+    $("#converter-target-label");
+
+  const targetDescription =
+    $("#converter-target-description");
+
+  const routeNote =
+    $("#converter-route-note");
+
+  const action =
+    $("#converter-action");
+
+  const selectedRoute =
+    $("#converter-selected-route");
+
+  const selectedDescription =
+    $("#converter-selected-description");
+
+  const runButton =
+    $("#converter-run-button");
+
+  const engineStatus =
+    $("#converter-engine-status");
+
+  const resetButton =
+    $("#reset-tool-button");
+
+  const toastElement =
+    $("#toast");
+
+
+  if (
+    !converterInput
+    ||
+    !targetSelect
+  ) {
     return;
   }
 
+
   const API_BASE =
-    String(window.MAZEDOCS_API_BASE || "")
-      .replace(/\/$/, "");
+    String(
+      window.MAZEDOCS_API_BASE
+      ||
+      ""
+    ).replace(
+      /\/$/,
+      ""
+    );
+
+
+  /*
+   * Keeping the format map in the frontend makes the picker
+   * independent from route-discovery requests.
+   *
+   * The server performs the final validation before conversion.
+   */
+  const ROUTES = {
+    pdf: [
+      {
+        target:
+          "docx",
+
+        label:
+          "Word document (.docx)",
+
+        description:
+          "Editable Word document with extracted text and available images."
+      },
+
+      {
+        target:
+          "pptx",
+
+        label:
+          "PowerPoint (.pptx)",
+
+        description:
+          "Creates one PowerPoint slide from each PDF page."
+      },
+
+      {
+        target:
+          "txt",
+
+        label:
+          "Plain text (.txt)",
+
+        description:
+          "Extracts readable text from every PDF page."
+      },
+
+      {
+        target:
+          "png",
+
+        label:
+          "PNG pages (.zip)",
+
+        description:
+          "Exports every PDF page as a PNG image inside one ZIP file."
+      },
+
+      {
+        target:
+          "jpg",
+
+        label:
+          "JPG pages (.zip)",
+
+        description:
+          "Exports every PDF page as a JPEG image inside one ZIP file."
+      }
+    ],
+
+    docx: [
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Creates a PDF. LibreOffice gives the best layout fidelity when available."
+      },
+
+      {
+        target:
+          "txt",
+
+        label:
+          "Plain text (.txt)",
+
+        description:
+          "Extracts the readable text from the Word document."
+      },
+
+      {
+        target:
+          "html",
+
+        label:
+          "HTML page (.html)",
+
+        description:
+          "Converts Word paragraphs and tables into simple HTML."
+      }
+    ],
+
+    doc: [
+      {
+        target:
+          "docx",
+
+        label:
+          "Word document (.docx)",
+
+        description:
+          "Upgrades a legacy .doc file to modern Word format.",
+
+        requiresLibreOffice:
+          true
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Converts a legacy Word document to PDF.",
+
+        requiresLibreOffice:
+          true
+      },
+
+      {
+        target:
+          "txt",
+
+        label:
+          "Plain text (.txt)",
+
+        description:
+          "Extracts text from a legacy Word document.",
+
+        requiresLibreOffice:
+          true
+      }
+    ],
+
+    pptx: [
+      {
+        target:
+          "docx",
+
+        label:
+          "Word handout (.docx)",
+
+        description:
+          "Creates an editable Word handout from slide text, tables, and available images."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Converts the presentation to PDF."
+      },
+
+      {
+        target:
+          "txt",
+
+        label:
+          "Plain text (.txt)",
+
+        description:
+          "Extracts slide text into one text file."
+      }
+    ],
+
+    ppt: [
+      {
+        target:
+          "docx",
+
+        label:
+          "Word handout (.docx)",
+
+        description:
+          "Converts a legacy PowerPoint into an editable Word handout.",
+
+        requiresLibreOffice:
+          true
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Converts a legacy PowerPoint directly to PDF.",
+
+        requiresLibreOffice:
+          true
+      },
+
+      {
+        target:
+          "txt",
+
+        label:
+          "Plain text (.txt)",
+
+        description:
+          "Extracts slide text from a legacy PowerPoint.",
+
+        requiresLibreOffice:
+          true
+      }
+    ],
+
+    xlsx: [
+      {
+        target:
+          "csv",
+
+        label:
+          "CSV data (.csv / .zip)",
+
+        description:
+          "Exports workbook data as CSV. Multi-sheet files may download as a ZIP."
+      },
+
+      {
+        target:
+          "json",
+
+        label:
+          "JSON data (.json)",
+
+        description:
+          "Exports workbook data grouped by worksheet."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Creates a printable spreadsheet PDF."
+      }
+    ],
+
+    xls: [
+      {
+        target:
+          "xlsx",
+
+        label:
+          "Excel workbook (.xlsx)",
+
+        description:
+          "Upgrades a legacy .xls workbook to modern Excel format.",
+
+        requiresLibreOffice:
+          true
+      },
+
+      {
+        target:
+          "csv",
+
+        label:
+          "CSV data (.csv)",
+
+        description:
+          "Exports legacy spreadsheet data to CSV.",
+
+        requiresLibreOffice:
+          true
+      },
+
+      {
+        target:
+          "json",
+
+        label:
+          "JSON data (.json)",
+
+        description:
+          "Exports legacy spreadsheet data to JSON.",
+
+        requiresLibreOffice:
+          true
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Converts the legacy workbook to PDF.",
+
+        requiresLibreOffice:
+          true
+      }
+    ],
+
+    csv: [
+      {
+        target:
+          "xlsx",
+
+        label:
+          "Excel workbook (.xlsx)",
+
+        description:
+          "Turns CSV rows into an Excel workbook."
+      },
+
+      {
+        target:
+          "json",
+
+        label:
+          "JSON data (.json)",
+
+        description:
+          "Turns CSV rows into JSON objects."
+      }
+    ],
+
+    json: [
+      {
+        target:
+          "csv",
+
+        label:
+          "CSV data (.csv)",
+
+        description:
+          "Flattens common JSON records into a CSV table."
+      },
+
+      {
+        target:
+          "xlsx",
+
+        label:
+          "Excel workbook (.xlsx)",
+
+        description:
+          "Turns common JSON records into an Excel workbook."
+      }
+    ],
+
+    txt: [
+      {
+        target:
+          "docx",
+
+        label:
+          "Word document (.docx)",
+
+        description:
+          "Places plain text into an editable Word document."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Turns plain text into a printable PDF."
+      }
+    ],
+
+    md: [
+      {
+        target:
+          "html",
+
+        label:
+          "HTML page (.html)",
+
+        description:
+          "Renders Markdown as HTML."
+      },
+
+      {
+        target:
+          "docx",
+
+        label:
+          "Word document (.docx)",
+
+        description:
+          "Turns Markdown into a simple editable Word document."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Turns Markdown text into a printable PDF."
+      }
+    ],
+
+    html: [
+      {
+        target:
+          "txt",
+
+        label:
+          "Plain text (.txt)",
+
+        description:
+          "Removes markup and keeps readable page text."
+      },
+
+      {
+        target:
+          "docx",
+
+        label:
+          "Word document (.docx)",
+
+        description:
+          "Converts common headings, paragraphs, and lists into Word."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Creates a printable PDF from the page text."
+      }
+    ],
+
+    htm: [
+      {
+        target:
+          "txt",
+
+        label:
+          "Plain text (.txt)",
+
+        description:
+          "Removes markup and keeps readable page text."
+      },
+
+      {
+        target:
+          "docx",
+
+        label:
+          "Word document (.docx)",
+
+        description:
+          "Converts common headings, paragraphs, and lists into Word."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Creates a printable PDF from the page text."
+      }
+    ],
+
+    jpg: [
+      {
+        target:
+          "png",
+
+        label:
+          "PNG image (.png)",
+
+        description:
+          "Converts the JPEG image to PNG."
+      },
+
+      {
+        target:
+          "webp",
+
+        label:
+          "WEBP image (.webp)",
+
+        description:
+          "Converts the JPEG image to WEBP."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Uses the image itself as the PDF page with no document margins."
+      }
+    ],
+
+    jpeg: [
+      {
+        target:
+          "png",
+
+        label:
+          "PNG image (.png)",
+
+        description:
+          "Converts the JPEG image to PNG."
+      },
+
+      {
+        target:
+          "webp",
+
+        label:
+          "WEBP image (.webp)",
+
+        description:
+          "Converts the JPEG image to WEBP."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Uses the image itself as the PDF page with no document margins."
+      }
+    ],
+
+    png: [
+      {
+        target:
+          "jpg",
+
+        label:
+          "JPG image (.jpg)",
+
+        description:
+          "Converts PNG to JPEG. Transparent pixels become white because JPEG has no transparency."
+      },
+
+      {
+        target:
+          "webp",
+
+        label:
+          "WEBP image (.webp)",
+
+        description:
+          "Converts PNG to WEBP."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Uses the image itself as the PDF page with no extra margins."
+      }
+    ],
+
+    webp: [
+      {
+        target:
+          "jpg",
+
+        label:
+          "JPG image (.jpg)",
+
+        description:
+          "Converts WEBP to JPEG."
+      },
+
+      {
+        target:
+          "png",
+
+        label:
+          "PNG image (.png)",
+
+        description:
+          "Converts WEBP to PNG."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Uses the image itself as the PDF page with no extra margins."
+      }
+    ],
+
+    heic: [
+      {
+        target:
+          "jpg",
+
+        label:
+          "JPG image (.jpg)",
+
+        description:
+          "Converts a HEIC phone photo to JPEG."
+      },
+
+      {
+        target:
+          "png",
+
+        label:
+          "PNG image (.png)",
+
+        description:
+          "Converts a HEIC phone photo to PNG."
+      },
+
+      {
+        target:
+          "pdf",
+
+        label:
+          "PDF document (.pdf)",
+
+        description:
+          "Uses the HEIC photo itself as the PDF page."
+      }
+    ]
+  };
+
 
   const state = {
-    file: null,
-    source: "",
-    target: "",
-    routes: [],
-    apiOnline: false,
-    libreoffice: false
+    file:
+      null,
+
+    source:
+      "",
+
+    target:
+      "",
+
+    apiOnline:
+      false,
+
+    libreOffice:
+      false
   };
 
-  const targetDetails = {
-    docx: "Editable Microsoft Word document",
-    pptx: "Microsoft PowerPoint presentation",
-    pdf: "Portable PDF document",
-    txt: "Plain editable text",
-    html: "Web-ready HTML document",
-    csv: "Comma-separated spreadsheet data",
-    json: "Structured JSON data",
-    xlsx: "Microsoft Excel workbook",
-    png: "PNG image pages",
-    jpg: "JPEG image pages",
-    webp: "WEBP image"
-  };
+
+  function extensionOf(file) {
+    const name =
+      file?.name
+        ?.toLowerCase()
+        ||
+      "";
+
+
+    const dot =
+      name.lastIndexOf(
+        "."
+      );
+
+
+    return (
+      dot >= 0
+        ? name.slice(
+            dot + 1
+          )
+        : ""
+    );
+  }
+
 
   function formatBytes(bytes) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+
     return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
   }
 
-  function extensionOf(file) {
-    const parts = file.name.toLowerCase().split(".");
-    return parts.length > 1 ? parts.pop() : "";
-  }
 
   function toast(message) {
-    if (!toastElement) return;
+    if (!toastElement) {
+      return;
+    }
 
-    toastElement.textContent = message;
-    toastElement.classList.add("is-visible");
 
-    clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => {
-      toastElement.classList.remove("is-visible");
-    }, 2800);
+    toastElement.textContent =
+      message;
+
+
+    toastElement.classList.add(
+      "is-visible"
+    );
+
+
+    clearTimeout(
+      toast.timer
+    );
+
+
+    toast.timer =
+      setTimeout(
+        () => {
+          toastElement.classList.remove(
+            "is-visible"
+          );
+        },
+        2800
+      );
   }
 
-  function setEngineStatus(online, libreoffice, message = "") {
-    state.apiOnline = online;
-    state.libreoffice = libreoffice;
 
-    engineStatus.classList.toggle("is-online", online);
-    engineStatus.classList.toggle("is-full", Boolean(libreoffice));
+  function setEngineStatus(
+    online,
+    libreOffice,
+    message = ""
+  ) {
+    state.apiOnline =
+      online;
 
-    const strong = engineStatus.querySelector("strong");
-    const small = engineStatus.querySelector("small");
+
+    state.libreOffice =
+      libreOffice;
+
+
+    engineStatus.classList.toggle(
+      "is-online",
+      online
+    );
+
+
+    engineStatus.classList.toggle(
+      "is-full",
+      Boolean(
+        libreOffice
+      )
+    );
+
+
+    const strong =
+      engineStatus.querySelector(
+        "strong"
+      );
+
+
+    const small =
+      engineStatus.querySelector(
+        "small"
+      );
+
 
     if (!online) {
-      strong.textContent = "Converter API offline";
-      small.textContent = message || "Start the MazeDocs V2 Python server to use converters.";
+      strong.textContent =
+        "Converter API offline";
+
+
+      small.textContent =
+        message
+        ||
+        "Start the MazeDocs Python server or redeploy the backend.";
+
+
       return;
     }
 
-    if (libreoffice) {
-      strong.textContent = "Full conversion engine online";
-      small.textContent = "LibreOffice detected · legacy .doc / .ppt / .xls routes enabled.";
+
+    if (libreOffice) {
+      strong.textContent =
+        "Full conversion engine online";
+
+
+      small.textContent =
+        "LibreOffice detected · modern and legacy Office routes are ready.";
+
+
       return;
     }
 
-    strong.textContent = "Portable conversion engine online";
-    small.textContent = "PDF, modern Office, data, text, and image routes are ready. Legacy Office routes need LibreOffice.";
+
+    strong.textContent =
+      "Portable conversion engine online";
+
+
+    small.textContent =
+      "PDF, modern Office, data, text, and image routes are ready.";
   }
+
 
   async function checkApi() {
     try {
-      const response = await fetch(`${API_BASE}/api`, { cache: "no-store" });
-      if (!response.ok) throw new Error("API unavailable");
-      const data = await response.json();
-      setEngineStatus(true, Boolean(data.libreoffice_available));
+      const response =
+        await fetch(
+          `${API_BASE}/api`,
+          {
+            cache:
+              "no-store"
+          }
+        );
+
+
+      const contentType =
+        response.headers.get(
+          "content-type"
+        )
+        ||
+        "";
+
+
+      if (
+        !response.ok
+        ||
+        !contentType.includes(
+          "application/json"
+        )
+      ) {
+        throw new Error(
+          "MazeDocs API did not return JSON."
+        );
+      }
+
+
+      const data =
+        await response.json();
+
+
+      setEngineStatus(
+        true,
+        Boolean(
+          data.libreoffice_available
+        )
+      );
     }
     catch (error) {
-      setEngineStatus(false, false);
-    }
-  }
-
-  function clearConverter() {
-    state.file = null;
-    state.source = "";
-    state.target = "";
-    state.routes = [];
-
-    converterInput.value = "";
-    fileCard.hidden = true;
-    targets.hidden = true;
-    action.hidden = true;
-    targetGrid.innerHTML = "";
-    converterDrop.hidden = false;
-  }
-
-  async function setFile(file) {
-    if (!file) return;
-
-    const source = extensionOf(file);
-    if (!source) {
-      toast("This file has no recognizable extension.");
-      return;
-    }
-
-    state.file = file;
-    state.source = source;
-    state.target = "";
-
-    converterDrop.hidden = true;
-    fileCard.hidden = false;
-    targets.hidden = false;
-    action.hidden = true;
-
-    fileExt.textContent = source.toUpperCase();
-    fileName.textContent = file.name;
-    fileMeta.textContent = formatBytes(file.size);
-    targetGrid.innerHTML = '<div class="converter-loading">Finding valid conversion routes…</div>';
-
-    try {
-      const response = await fetch(
-        `${API_BASE}/api/routes?ext=${encodeURIComponent(source)}`,
-        { cache: "no-store" }
+      console.error(
+        error
       );
 
-      const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.detail || "Unsupported file type");
-      }
-
-      state.routes = data.outputs || [];
-      routeNote.textContent = data.note || "";
-      renderTargets();
-    }
-    catch (error) {
-      state.routes = [];
-      targetGrid.innerHTML = `<div class="converter-error">${String(error.message || error)}</div>`;
-      routeNote.textContent = "Converter API required.";
+      setEngineStatus(
+        false,
+        false
+      );
     }
   }
 
-  function renderTargets() {
-    targetGrid.innerHTML = "";
 
-    if (!state.routes.length) {
-      targetGrid.innerHTML = '<div class="converter-error">No conversion routes are available for this format.</div>';
+  function resetTargetPicker() {
+    state.target =
+      "";
+
+
+    targetSelect.innerHTML =
+      '<option value="">Choose a format…</option>';
+
+
+    targetLabel.textContent =
+      "Choose an output above.";
+
+
+    targetDescription.textContent =
+      "MazeDocs only shows formats that make sense for the source file.";
+
+
+    action.hidden =
+      true;
+  }
+
+
+  function clearConverter() {
+    state.file =
+      null;
+
+
+    state.source =
+      "";
+
+
+    resetTargetPicker();
+
+
+    converterInput.value =
+      "";
+
+
+    fileCard.hidden =
+      true;
+
+
+    targets.hidden =
+      true;
+
+
+    converterDrop.hidden =
+      false;
+
+
+    routeNote.textContent =
+      "Select the file type you want MazeDocs to create.";
+  }
+
+
+  function populateTargets() {
+    resetTargetPicker();
+
+
+    const routes =
+      ROUTES[state.source]
+      ||
+      [];
+
+
+    if (!routes.length) {
+      targets.hidden =
+        false;
+
+
+      targetLabel.textContent =
+        "Unsupported file type";
+
+
+      targetDescription.textContent =
+        `MazeDocs does not have conversion routes for .${state.source || "?"}.`;
+
+
+      routeNote.textContent =
+        "Choose another source file.";
+
+
       return;
     }
 
-    state.routes.forEach((route) => {
-      const target = typeof route === "string" ? route : route.target;
-      const requiresLibreOffice = Boolean(route.requires_libreoffice);
-      const available = route.available !== false;
 
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "converter-target";
-      button.dataset.target = target;
+    routes.forEach(
+      (route) => {
+        const option =
+          document.createElement(
+            "option"
+          );
 
-      if (!available) {
-        button.classList.add("is-unavailable");
+
+        option.value =
+          route.target;
+
+
+        option.textContent =
+          route.requiresLibreOffice
+            ? `${route.label} · requires LibreOffice`
+            : route.label;
+
+
+        option.disabled =
+          Boolean(
+            route.requiresLibreOffice
+            &&
+            state.apiOnline
+            &&
+            !state.libreOffice
+          );
+
+
+        targetSelect.appendChild(
+          option
+        );
       }
+    );
 
-      button.innerHTML = `
-        <span>${target.toUpperCase()}</span>
-        <small>${targetDetails[target] || "Converted file"}</small>
-        ${requiresLibreOffice ? '<b>FULL ENGINE</b>' : '<b>READY</b>'}
-      `;
 
-      button.addEventListener("click", () => {
-        if (!available) {
-          toast("This route needs the full LibreOffice engine.");
-          return;
-        }
+    targets.hidden =
+      false;
 
-        state.target = target;
 
-        [...targetGrid.querySelectorAll(".converter-target")].forEach((item) => {
-          item.classList.toggle("is-selected", item === button);
-        });
-
-        selectedRoute.textContent = `${state.source.toUpperCase()} → ${target.toUpperCase()}`;
-        selectedDescription.textContent = route.description || targetDetails[target] || "Converted file";
-        action.hidden = false;
-      });
-
-      targetGrid.appendChild(button);
-    });
+    if (
+      !state.apiOnline
+    ) {
+      routeNote.textContent =
+        "Formats are available, but the converter API is currently offline.";
+    }
+    else if (
+      state.libreOffice
+    ) {
+      routeNote.textContent =
+        "Full engine online · legacy Office formats are enabled.";
+    }
+    else {
+      routeNote.textContent =
+        "Portable engine online · legacy .doc, .ppt, and .xls need LibreOffice.";
+    }
   }
+
+
+  function setFile(file) {
+    if (!file) {
+      return;
+    }
+
+
+    const source =
+      extensionOf(
+        file
+      );
+
+
+    if (
+      !source
+      ||
+      !ROUTES[source]
+    ) {
+      toast(
+        "This file type is not supported yet."
+      );
+
+
+      return;
+    }
+
+
+    state.file =
+      file;
+
+
+    state.source =
+      source;
+
+
+    converterDrop.hidden =
+      true;
+
+
+    fileCard.hidden =
+      false;
+
+
+    fileExt.textContent =
+      source.toUpperCase();
+
+
+    fileName.textContent =
+      file.name;
+
+
+    fileMeta.textContent =
+      formatBytes(
+        file.size
+      );
+
+
+    populateTargets();
+  }
+
+
+  function selectedRouteDefinition() {
+    return (
+      ROUTES[state.source]
+      ||
+      []
+    ).find(
+      (route) =>
+        route.target ===
+        state.target
+    );
+  }
+
+
+  function updateSelectedTarget() {
+    state.target =
+      targetSelect.value;
+
+
+    const route =
+      selectedRouteDefinition();
+
+
+    if (!route) {
+      targetLabel.textContent =
+        "Choose an output above.";
+
+
+      targetDescription.textContent =
+        "MazeDocs only shows formats that make sense for the source file.";
+
+
+      action.hidden =
+        true;
+
+
+      return;
+    }
+
+
+    targetLabel.textContent =
+      route.label;
+
+
+    targetDescription.textContent =
+      route.description;
+
+
+    selectedRoute.textContent =
+      `${state.source.toUpperCase()} → ${route.target.toUpperCase()}`;
+
+
+    selectedDescription.textContent =
+      route.description;
+
+
+    const unavailable =
+      route.requiresLibreOffice
+      &&
+      !state.libreOffice;
+
+
+    runButton.disabled =
+      !state.apiOnline
+      ||
+      unavailable;
+
+
+    if (unavailable) {
+      selectedDescription.textContent =
+        `${route.description} LibreOffice is required for this route.`;
+    }
+    else if (!state.apiOnline) {
+      selectedDescription.textContent =
+        `${route.description} The converter API is currently offline.`;
+    }
+
+
+    action.hidden =
+      false;
+  }
+
+
+  async function readErrorResponse(
+    response
+  ) {
+    const contentType =
+      response.headers.get(
+        "content-type"
+      )
+      ||
+      "";
+
+
+    if (
+      contentType.includes(
+        "application/json"
+      )
+    ) {
+      try {
+        const data =
+          await response.json();
+
+
+        return (
+          data.detail
+          ||
+          data.message
+          ||
+          `Conversion failed (${response.status}).`
+        );
+      }
+      catch {
+        return `Conversion failed (${response.status}).`;
+      }
+    }
+
+
+    const text =
+      await response.text();
+
+
+    if (
+      /<!doctype|<html/i.test(
+        text
+      )
+    ) {
+      return "The converter endpoint was not reached. Redeploy the updated MazeDocs backend.";
+    }
+
+
+    return (
+      text.trim().slice(
+        0,
+        180
+      )
+      ||
+      `Conversion failed (${response.status}).`
+    );
+  }
+
 
   async function convertFile() {
-    if (!state.file || !state.target) {
-      toast("Choose an output format first.");
+    if (
+      !state.file
+      ||
+      !state.target
+    ) {
+      toast(
+        "Choose an output format first."
+      );
+
+
       return;
     }
 
-    const originalText = runButton.innerHTML;
-    runButton.disabled = true;
-    runButton.textContent = "Converting…";
-    action.classList.add("is-processing");
+
+    if (
+      !state.apiOnline
+    ) {
+      toast(
+        "Converter API is offline."
+      );
+
+
+      return;
+    }
+
+
+    const originalText =
+      runButton.innerHTML;
+
+
+    runButton.disabled =
+      true;
+
+
+    runButton.textContent =
+      "Converting…";
+
+
+    action.classList.add(
+      "is-processing"
+    );
+
 
     try {
-      const form = new FormData();
-      form.append("file", state.file);
-      form.append("target", state.target);
+      const form =
+        new FormData();
 
-      const response = await fetch(`${API_BASE}/api/convert`, {
-        method: "POST",
-        body: form
-      });
+
+      form.append(
+        "file",
+        state.file
+      );
+
+
+      form.append(
+        "target",
+        state.target
+      );
+
+
+      /*
+       * POST to /api instead of /api/convert.
+       *
+       * This uses the same Vercel Python function URL that
+       * already works for the API health check.
+       */
+      const response =
+        await fetch(
+          `${API_BASE}/api`,
+          {
+            method:
+              "POST",
+
+            body:
+              form
+          }
+        );
+
 
       if (!response.ok) {
-        let message = `Conversion failed (${response.status}).`;
-        try {
-          const error = await response.json();
-          message = error.detail || message;
-        }
-        catch {}
-        throw new Error(message);
+        throw new Error(
+          await readErrorResponse(
+            response
+          )
+        );
       }
 
-      const blob = await response.blob();
-      const disposition = response.headers.get("content-disposition") || "";
-      const encodedMatch = disposition.match(/filename\\*=UTF-8''([^;]+)/i);
-      const plainMatch = disposition.match(/filename="?([^";]+)"?/i);
 
-      let downloadName = `mazedocs-converted.${state.target}`;
-      if (encodedMatch) downloadName = decodeURIComponent(encodedMatch[1]);
-      else if (plainMatch) downloadName = plainMatch[1];
+      const blob =
+        await response.blob();
 
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = downloadName;
-      document.body.appendChild(link);
+
+      const disposition =
+        response.headers.get(
+          "content-disposition"
+        )
+        ||
+        "";
+
+
+      const encodedMatch =
+        disposition.match(
+          /filename\*=UTF-8''([^;]+)/i
+        );
+
+
+      const plainMatch =
+        disposition.match(
+          /filename="?([^";]+)"?/i
+        );
+
+
+      let downloadName =
+        `mazedocs-converted.${state.target}`;
+
+
+      if (encodedMatch) {
+        downloadName =
+          decodeURIComponent(
+            encodedMatch[1]
+          );
+      }
+      else if (plainMatch) {
+        downloadName =
+          plainMatch[1];
+      }
+
+
+      const url =
+        URL.createObjectURL(
+          blob
+        );
+
+
+      const link =
+        document.createElement(
+          "a"
+        );
+
+
+      link.href =
+        url;
+
+
+      link.download =
+        downloadName;
+
+
+      document.body.appendChild(
+        link
+      );
+
+
       link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 700);
 
-      toast("Conversion complete.");
+      link.remove();
+
+
+      setTimeout(
+        () => {
+          URL.revokeObjectURL(
+            url
+          );
+        },
+        700
+      );
+
+
+      toast(
+        "Conversion complete."
+      );
     }
     catch (error) {
-      console.error(error);
-      toast(error.message || "Conversion failed.");
+      console.error(
+        error
+      );
+
+
+      toast(
+        error.message
+        ||
+        "Conversion failed."
+      );
     }
     finally {
-      runButton.disabled = false;
-      runButton.innerHTML = originalText;
-      action.classList.remove("is-processing");
+      runButton.innerHTML =
+        originalText;
+
+
+      runButton.disabled =
+        false;
+
+
+      action.classList.remove(
+        "is-processing"
+      );
+
+
+      updateSelectedTarget();
     }
   }
+
 
   function attachDropZone() {
-    ["dragenter", "dragover"].forEach((name) => {
-      converterDrop.addEventListener(name, (event) => {
-        event.preventDefault();
-        converterDrop.classList.add("is-dragging");
-      });
-    });
+    [
+      "dragenter",
+      "dragover"
+    ].forEach(
+      (eventName) => {
+        converterDrop.addEventListener(
+          eventName,
+          (event) => {
+            event.preventDefault();
 
-    ["dragleave", "drop"].forEach((name) => {
-      converterDrop.addEventListener(name, (event) => {
-        event.preventDefault();
-        converterDrop.classList.remove("is-dragging");
 
-        if (name === "drop") {
-          setFile(event.dataTransfer.files[0]);
-        }
-      });
-    });
+            converterDrop.classList.add(
+              "is-dragging"
+            );
+          }
+        );
+      }
+    );
+
+
+    [
+      "dragleave",
+      "drop"
+    ].forEach(
+      (eventName) => {
+        converterDrop.addEventListener(
+          eventName,
+          (event) => {
+            event.preventDefault();
+
+
+            converterDrop.classList.remove(
+              "is-dragging"
+            );
+
+
+            if (
+              eventName ===
+              "drop"
+            ) {
+              setFile(
+                event.dataTransfer.files[0]
+              );
+            }
+          }
+        );
+      }
+    );
   }
 
-  chooseButton.addEventListener("click", () => converterInput.click());
 
-  converterInput.addEventListener("change", () => {
-    setFile(converterInput.files[0]);
-  });
-
-  clearButton.addEventListener("click", clearConverter);
-  runButton.addEventListener("click", convertFile);
-
-  resetButton?.addEventListener("click", () => {
-    const panel = document.querySelector('[data-tool-panel="convert"]');
-    if (panel && !panel.hidden) {
-      clearConverter();
+  chooseButton.addEventListener(
+    "click",
+    () => {
+      converterInput.click();
     }
-  });
+  );
+
+
+  converterInput.addEventListener(
+    "change",
+    () => {
+      setFile(
+        converterInput.files[0]
+      );
+    }
+  );
+
+
+  targetSelect.addEventListener(
+    "change",
+    updateSelectedTarget
+  );
+
+
+  clearButton.addEventListener(
+    "click",
+    clearConverter
+  );
+
+
+  runButton.addEventListener(
+    "click",
+    convertFile
+  );
+
+
+  resetButton?.addEventListener(
+    "click",
+    () => {
+      const panel =
+        document.querySelector(
+          '[data-tool-panel="convert"]'
+        );
+
+
+      if (
+        panel
+        &&
+        !panel.hidden
+      ) {
+        clearConverter();
+      }
+    }
+  );
+
 
   attachDropZone();
-  checkApi();
+
+  clearConverter();
+
+  checkApi().then(
+    () => {
+      if (state.file) {
+        populateTargets();
+      }
+    }
+  );
 })();

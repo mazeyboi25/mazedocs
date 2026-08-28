@@ -923,9 +923,9 @@ def convert_file(input_path: Path, source: str, target: str, workdir: Path) -> P
     raise RuntimeError("This conversion route is not implemented.")
 
 
-@app.get("/api")
-def health() -> dict[str, Any]:
+def health_payload() -> dict[str, Any]:
     executable = find_libreoffice()
+
     return {
         "ok": True,
         "service": "MazeDocs V2",
@@ -937,77 +937,124 @@ def health() -> dict[str, Any]:
     }
 
 
-@app.get("/api/routes")
-def routes(ext: str) -> dict[str, Any]:
-    source = ext.lower().strip().lstrip(".")
-
-    if source not in ROUTES:
-        raise HTTPException(400, f".{source or '?'} is not supported by MazeDocs V2.")
-
-    libreoffice_available = bool(find_libreoffice())
-    outputs = []
-
-    for route in ROUTES[source]:
-        item = dict(route)
-        needs_lo = bool(item.get("requires_libreoffice"))
-        item["available"] = not needs_lo or libreoffice_available
-        outputs.append(item)
-
-    note = (
-        "Full LibreOffice engine detected. Legacy Office routes are available."
-        if libreoffice_available
-        else "Portable mode: legacy .doc, .ppt, and .xls routes need LibreOffice."
-    )
-
-    return {
-        "source": source,
-        "outputs": outputs,
-        "libreoffice_available": libreoffice_available,
-        "note": note,
-    }
-
-
-@app.post("/api/convert")
-async def convert(
-    file: UploadFile = File(...),
-    target: str = Form(...),
+async def convert_upload(
+    file: UploadFile,
+    target: str,
 ) -> Response:
     filename = file.filename or "upload"
     source = source_extension(filename)
     target = target.lower().strip().lstrip(".")
 
     if source not in ROUTES:
-        raise HTTPException(400, f".{source or '?'} is not supported.")
+        raise HTTPException(
+            400,
+            f".{source or '?'} is not supported.",
+        )
 
-    valid_targets = {route["target"] for route in ROUTES[source]}
+    valid_targets = {
+        route["target"]
+        for route in ROUTES[source]
+    }
+
     if target not in valid_targets:
-        raise HTTPException(400, f"Cannot convert .{source} to .{target}.")
+        raise HTTPException(
+            400,
+            f"Cannot convert .{source} to .{target}.",
+        )
+
+    route = next(
+        route
+        for route in ROUTES[source]
+        if route["target"] == target
+    )
+
+    if (
+        route.get("requires_libreoffice")
+        and
+        not find_libreoffice()
+    ):
+        raise HTTPException(
+            422,
+            "This conversion route requires LibreOffice.",
+        )
 
     payload = await file.read()
 
     if not payload:
-        raise HTTPException(400, "The uploaded file is empty.")
+        raise HTTPException(
+            400,
+            "The uploaded file is empty.",
+        )
 
     if len(payload) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "This file is larger than the MazeDocs V2 25 MB application limit.")
+        raise HTTPException(
+            413,
+            "This file is larger than the MazeDocs V2 25 MB application limit.",
+        )
 
-    with tempfile.TemporaryDirectory(prefix="mazedocs-") as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="mazedocs-"
+    ) as temporary:
         workdir = Path(temporary)
         input_path = workdir / f"source.{source}"
         input_path.write_bytes(payload)
 
         try:
-            output_path = convert_file(input_path, source, target, workdir)
+            output_path = convert_file(
+                input_path,
+                source,
+                target,
+                workdir,
+            )
         except RuntimeError as error:
-            raise HTTPException(422, str(error)) from error
+            raise HTTPException(
+                422,
+                str(error),
+            ) from error
         except Exception as error:
-            raise HTTPException(500, f"Conversion failed: {error}") from error
+            raise HTTPException(
+                500,
+                f"Conversion failed: {error}",
+            ) from error
 
         final_name = output_path.name
-        if output_path.stem.startswith("source"):
-            final_name = output_path.name.replace("source", safe_stem(filename), 1)
 
-        return response_for(output_path, final_name)
+        if output_path.stem.startswith("source"):
+            final_name = output_path.name.replace(
+                "source",
+                safe_stem(filename),
+                1,
+            )
+
+        return response_for(
+            output_path,
+            final_name,
+        )
+
+
+@app.get("/api")
+def health() -> dict[str, Any]:
+    """
+    Stable Vercel entrypoint used by the frontend health check.
+    """
+    return health_payload()
+
+
+@app.post("/api")
+async def convert_from_root_api(
+    file: UploadFile = File(...),
+    target: str = Form(...),
+) -> Response:
+    """
+    Stable conversion endpoint.
+
+    The frontend uses POST /api because this exact function URL
+    is reliably available in both local FastAPI and Vercel.
+    """
+    return await convert_upload(
+        file,
+        target,
+    )
 
 
 # Local all-in-one server routes. On Vercel, root static files can still be served normally.
