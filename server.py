@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from openpyxl import Workbook, load_workbook
 from PIL import Image
+from pdf2docx import Converter as PDFToDOCXConverter
 from pillow_heif import register_heif_opener
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -37,7 +38,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, 
 register_heif_opener()
 
 ROOT = Path(__file__).resolve().parent
-MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
 app = FastAPI(
     title="MazeDocs V2 API",
@@ -55,7 +56,7 @@ app.add_middleware(
 
 ROUTES: dict[str, list[dict[str, Any]]] = {
     "pdf": [
-        {"target": "docx", "description": "Editable Word document with extracted text and images."},
+        {"target": "docx", "description": "Editable Word document reconstructed from the PDF with text, images, tables, and layout preserved as closely as possible."},
         {"target": "pptx", "description": "One visually faithful PDF page per PowerPoint slide."},
         {"target": "txt", "description": "Plain text extracted from every PDF page."},
         {"target": "png", "description": "PNG page images packaged as a ZIP file."},
@@ -267,56 +268,58 @@ def pdf_to_txt(input_path: Path, output_path: Path) -> None:
 
 
 def pdf_to_docx(input_path: Path, output_path: Path) -> None:
-    source = fitz.open(input_path)
-    document = Document()
-    document.core_properties.title = input_path.stem
+    """
+    Reconstruct a PDF as an editable Word document.
 
-    for page_number, page in enumerate(source, start=1):
-        if page_number > 1:
-            document.add_page_break()
+    pdf2docx reads PDF geometry, text spans, images, tables, and page
+    structure, then rebuilds them as Word elements. This gives much
+    better editability and layout preservation than simply extracting
+    text into paragraphs.
 
-        blocks = page.get_text("dict").get("blocks", [])
+    Note: PDF and DOCX use fundamentally different layout models, so no
+    converter can guarantee pixel-perfect results for every complex PDF.
+    """
 
-        for block in blocks:
-            if block.get("type") != 0:
-                continue
+    converter = None
 
-            for line in block.get("lines", []):
-                spans = line.get("spans", [])
-                text = "".join(span.get("text", "") for span in spans).strip()
+    try:
+        # Fail clearly for PDFs with no pages instead of producing a
+        # misleading empty Word document.
+        with fitz.open(input_path) as source_pdf:
+            if len(source_pdf) == 0:
+                raise RuntimeError("The PDF contains no pages.")
 
-                if not text:
-                    continue
+        converter = PDFToDOCXConverter(
+            str(input_path)
+        )
 
-                max_size = max((float(span.get("size", 0)) for span in spans), default=0)
+        converter.convert(
+            str(output_path)
+        )
 
-                if max_size >= 18:
-                    paragraph = document.add_heading(text, level=1)
-                elif max_size >= 14:
-                    paragraph = document.add_heading(text, level=2)
-                else:
-                    paragraph = document.add_paragraph(text)
+    except RuntimeError:
+        raise
 
-                if spans and all(bool(span.get("flags", 0) & 16) for span in spans):
-                    for run in paragraph.runs:
-                        run.bold = True
+    except Exception as error:
+        raise RuntimeError(
+            f"PDF to Word conversion failed: {error}"
+        ) from error
 
-        image_xrefs = []
-        for image_info in page.get_images(full=True):
-            xref = image_info[0]
-            if xref in image_xrefs:
-                continue
-            image_xrefs.append(xref)
-
+    finally:
+        if converter is not None:
             try:
-                extracted = source.extract_image(xref)
-                image_bytes = extracted.get("image")
-                if image_bytes and len(image_bytes) > 1500:
-                    document.add_picture(io.BytesIO(image_bytes), width=Inches(5.8))
+                converter.close()
             except Exception:
                 pass
 
-    document.save(output_path)
+    if (
+        not output_path.exists()
+        or
+        output_path.stat().st_size == 0
+    ):
+        raise RuntimeError(
+            "PDF to Word conversion did not create a valid DOCX file."
+        )
 
 
 def pdf_to_pptx(input_path: Path, output_path: Path, workdir: Path) -> None:
@@ -989,7 +992,7 @@ async def convert_upload(
     if len(payload) > MAX_UPLOAD_BYTES:
         raise HTTPException(
             413,
-            "This file is larger than the MazeDocs V2 25 MB application limit.",
+            f"This file is larger than the MazeDocs {MAX_UPLOAD_BYTES // (1024 * 1024)} MB application limit.",
         )
 
     with tempfile.TemporaryDirectory(
