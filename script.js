@@ -1,3 +1,16 @@
+/* ============================================================
+   MAZEDOCS V1 — script.js
+
+   Tools included:
+   - Merge PDFs
+   - Organize / rotate / delete / extract pages
+   - Visual PDF compression
+   - Images to PDF
+   - Scan photos to PDF
+   - OCR images and PDFs
+
+   Processing is local-first in the browser.
+   ============================================================ */
 
 (() => {
   "use strict";
@@ -3438,10 +3451,10 @@
           "docx",
 
         label:
-          "Word document (.docx)",
+          "Editable Word document (.docx)",
 
         description:
-          "Creates an editable Word document from PDF text and available images."
+          "Rebuilds the PDF as an editable Word document while preserving text, images, tables, spacing, and page layout as closely as possible."
       },
 
       {
@@ -4664,6 +4677,16 @@
 
     selectedDescription.textContent =
       route.description;
+
+
+    if (
+      state.source === "pdf"
+      &&
+      state.target === "docx"
+    ) {
+      selectedDescription.textContent =
+        "Creates an editable Word document and preserves the PDF's text, images, tables, spacing, and layout as closely as the source allows.";
+    }
 
 
     const unavailable =
