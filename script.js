@@ -1,16 +1,3 @@
-/* ============================================================
-   MAZEDOCS V1 — script.js
-
-   Tools included:
-   - Merge PDFs
-   - Organize / rotate / delete / extract pages
-   - Visual PDF compression
-   - Images to PDF
-   - Scan photos to PDF
-   - OCR images and PDFs
-
-   Processing is local-first in the browser.
-   ============================================================ */
 
 (() => {
   "use strict";
@@ -34,6 +21,19 @@
     window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
+
+
+  /*
+   * MazeDocs user-facing file ceiling.
+   *
+   * IMPORTANT:
+   * This does NOT increase Vercel Function's request-body limit.
+   * Universal Converter files larger than DIRECT_API_LIMIT_BYTES
+   * are sent through the large-file direct-upload flow defined
+   * in the V2 converter controller at the bottom of this file.
+   */
+  const MAX_APP_FILE_BYTES =
+    200 * 1024 * 1024;
 
 
   const makeId = () => {
@@ -65,7 +65,9 @@
       return true;
     }
 
-    return /\.(jpe?g|png|webp)$/i.test(file.name || "");
+    return /\.(jpe?g|png|webp)$/i.test(
+      file.name || ""
+    );
   };
 
 
@@ -1583,398 +1585,403 @@
      ========================================================== */
 
   async function normalizeImageForPdf(
-    pdfDocument,
-    file,
-    grayscale = false
-  ) {
-    const dataUrl =
-      await fileToDataUrl(file);
+  pdfDocument,
+  file,
+  grayscale = false
+) {
 
-
-    const image =
-      await new Promise(
-        (resolve, reject) => {
-          const element =
-            new Image();
-
-          element.onload =
-            () => resolve(element);
-
-          element.onerror =
-            reject;
-
-          element.src =
-            dataUrl;
-        }
-      );
-
-
-    const maximumDimension =
-      2600;
-
-
-    const resizeScale =
-      Math.min(
-        1,
-        maximumDimension /
-          Math.max(
-            image.naturalWidth,
-            image.naturalHeight
-          )
-      );
-
-
-    const width =
-      Math.max(
-        1,
-        Math.round(
-          image.naturalWidth *
-          resizeScale
-        )
-      );
-
-
-    const height =
-      Math.max(
-        1,
-        Math.round(
-          image.naturalHeight *
-          resizeScale
-        )
-      );
-
-
-    const canvas =
-      document.createElement(
-        "canvas"
-      );
-
-
-    canvas.width =
-      width;
-
-    canvas.height =
-      height;
-
-
-    const context =
-      canvas.getContext(
-        "2d",
-        {
-          alpha:
-            true
-        }
-      );
-
-
-    context.clearRect(
-      0,
-      0,
-      width,
-      height
+  const dataUrl =
+    await fileToDataUrl(
+      file
     );
 
 
-    context.drawImage(
-      image,
-      0,
-      0,
-      width,
-      height
+  const image =
+    await new Promise(
+      (resolve, reject) => {
+
+        const element =
+          new Image();
+
+
+        element.onload =
+          () => resolve(element);
+
+
+        element.onerror =
+          reject;
+
+
+        element.src =
+          dataUrl;
+
+      }
     );
 
 
-    if (grayscale) {
-      const imageData =
-        context.getImageData(
-          0,
-          0,
-          width,
-          height
-        );
+  /*
+   * Limit extremely large images so the browser does not
+   * consume unnecessary memory.
+   *
+   * IMPORTANT:
+   * We keep the original aspect ratio.
+   */
+
+  const maximumDimension =
+    2600;
 
 
-      const pixels =
-        imageData.data;
+  const resizeScale =
+    Math.min(
+      1,
+
+      maximumDimension /
+      Math.max(
+        image.naturalWidth,
+        image.naturalHeight
+      )
+    );
 
 
-      for (
-        let index = 0;
-        index < pixels.length;
-        index += 4
-      ) {
-        const gray =
+  const width =
+    Math.max(
+      1,
+
+      Math.round(
+        image.naturalWidth *
+        resizeScale
+      )
+    );
+
+
+  const height =
+    Math.max(
+      1,
+
+      Math.round(
+        image.naturalHeight *
+        resizeScale
+      )
+    );
+
+
+  const canvas =
+    document.createElement(
+      "canvas"
+    );
+
+
+  canvas.width =
+    width;
+
+
+  canvas.height =
+    height;
+
+
+  /*
+   * Keep alpha support enabled.
+   *
+   * DO NOT use:
+   *
+   * { alpha: false }
+   *
+   * because that removes transparency.
+   */
+
+  const context =
+    canvas.getContext(
+      "2d",
+      {
+        alpha: true
+      }
+    );
+
+
+  /*
+   * IMPORTANT:
+   *
+   * Do NOT fill the canvas with white.
+   *
+   * The previous version had:
+   *
+   * context.fillStyle = "#ffffff";
+   * context.fillRect(...);
+   *
+   * That is what permanently created a white background.
+   */
+
+  context.clearRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+
+  context.drawImage(
+    image,
+    0,
+    0,
+    width,
+    height
+  );
+
+
+  /*
+   * Optional grayscale mode.
+   *
+   * Used by the Scan tool.
+   */
+
+  if (grayscale) {
+
+    const imageData =
+      context.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+
+    const pixels =
+      imageData.data;
+
+
+    for (
+      let index = 0;
+      index < pixels.length;
+      index += 4
+    ) {
+
+      const gray =
+        (
           pixels[index] *
           0.299
-          +
+        )
+        +
+        (
           pixels[index + 1] *
           0.587
-          +
+        )
+        +
+        (
           pixels[index + 2] *
-          0.114;
-
-
-        pixels[index] =
-          gray;
-
-        pixels[index + 1] =
-          gray;
-
-        pixels[index + 2] =
-          gray;
-      }
-
-
-      context.putImageData(
-        imageData,
-        0,
-        0
-      );
-    }
-
-
-    const pngDataUrl =
-      canvas.toDataURL(
-        "image/png"
-      );
-
-
-    const pngBytes =
-      await fetch(
-        pngDataUrl
-      ).then(
-        (response) =>
-          response.arrayBuffer()
-      );
-
-
-    const embedded =
-      await pdfDocument.embedPng(
-        pngBytes
-      );
-
-
-    return {
-      embedded,
-      width,
-      height
-    };
-  }
-
-
-  function addImagesToState(
-    targetArray,
-    files
-  ) {
-    const supportedImages =
-      files.filter(
-        isImage
-      );
-
-
-    if (!supportedImages.length) {
-      showToast(
-        "Choose JPG, PNG, or WEBP images."
-      );
-
-      return;
-    }
-
-
-    supportedImages.forEach(
-      (file) => {
-        targetArray.push({
-          id:
-            makeId(),
-
-          file,
-
-          previewUrl:
-            URL.createObjectURL(
-              file
-            )
-        });
-      }
-    );
-  }
-
-
-  function revokePreview(item) {
-    if (
-      item?.previewUrl
-    ) {
-      URL.revokeObjectURL(
-        item.previewUrl
-      );
-    }
-  }
-
-
-  function createImageCard(
-    item,
-    index,
-    onRemove
-  ) {
-    const card =
-      document.createElement(
-        "article"
-      );
-
-
-    card.className =
-      "image-card";
-
-
-    card.dataset.id =
-      item.id;
-
-
-    card.innerHTML = `
-      <div class="image-card__preview">
-        <img alt="" />
-      </div>
-
-      <div class="image-card__footer">
-        <span></span>
-
-        <button
-          class="file-remove"
-          type="button"
-          aria-label="Remove image"
-        >
-          ×
-        </button>
-      </div>
-    `;
-
-
-    card
-      .querySelector("img")
-      .src =
-        item.previewUrl;
-
-
-    card
-      .querySelector(".image-card__footer span")
-      .textContent =
-        `${String(index + 1).padStart(2, "0")} · ${item.file.name}`;
-
-
-    card
-      .querySelector(".file-remove")
-      .addEventListener(
-        "click",
-        onRemove
-      );
-
-
-    return card;
-  }
-
-
-  async function buildPdfFromImages(
-    items,
-    filename,
-    grayscale = false
-  ) {
-    if (!items.length) {
-      showToast(
-        "Add at least one image."
-      );
-
-      return;
-    }
-
-
-    showProcessing(
-      "Building PDF.",
-      "Turning each image directly into a PDF page."
-    );
-
-
-    try {
-      const output =
-        await PDFLib.PDFDocument.create();
-
-
-      for (
-        let index = 0;
-        index < items.length;
-        index += 1
-      ) {
-        elements.processingDetail.textContent =
-          `Adding image ${index + 1} of ${items.length}.`;
-
-
-        const imageData =
-          await normalizeImageForPdf(
-            output,
-            items[index].file,
-            grayscale
-          );
-
-
-        /*
-         * The PDF page is exactly the image size.
-         * No A4 canvas, no margins, and no white padding.
-         */
-        const page =
-          output.addPage([
-            imageData.width,
-            imageData.height
-          ]);
-
-
-        page.drawImage(
-          imageData.embedded,
-          {
-            x:
-              0,
-
-            y:
-              0,
-
-            width:
-              imageData.width,
-
-            height:
-              imageData.height
-          }
+          0.114
         );
-      }
 
 
-      const bytes =
-        await output.save();
+      pixels[index] =
+        gray;
 
 
-      downloadBytes(
-        bytes,
-        filename,
-        "application/pdf"
-      );
+      pixels[index + 1] =
+        gray;
 
 
-      showToast(
-        "PDF ready."
-      );
+      pixels[index + 2] =
+        gray;
+
     }
-    catch (error) {
-      console.error(
-        error
-      );
 
 
-      showToast(
-        "Could not build this PDF."
-      );
-    }
-    finally {
-      hideProcessing();
-    }
+    context.putImageData(
+      imageData,
+      0,
+      0
+    );
+
   }
 
 
+  /*
+   * Convert everything through PNG.
+   *
+   * PNG is used instead of JPEG because:
+   *
+   * - PNG supports transparency
+   * - no artificial white background
+   * - works consistently for JPG / PNG / WEBP input
+   */
+
+  const pngDataUrl =
+    canvas.toDataURL(
+      "image/png"
+    );
+
+
+  const pngBytes =
+    await fetch(
+      pngDataUrl
+    ).then(
+      (response) =>
+        response.arrayBuffer()
+    );
+
+
+  const embedded =
+    await pdfDocument.embedPng(
+      pngBytes
+    );
+
+
+  return {
+
+    embedded,
+
+    width,
+
+    height
+
+  };
+
+}
+  async function buildPdfFromImages(
+  items,
+  filename,
+  grayscale = false
+) {
+
+  if (!items.length) {
+
+    showToast(
+      "Add at least one image."
+    );
+
+
+    return;
+
+  }
+
+
+  showProcessing(
+    "Building PDF.",
+    "Turning each image directly into a PDF page."
+  );
+
+
+  try {
+
+    const output =
+      await PDFLib.PDFDocument.create();
+
+
+    for (
+      let index = 0;
+      index < items.length;
+      index += 1
+    ) {
+
+      elements.processingDetail.textContent =
+        `Adding image ${index + 1} of ${items.length}.`;
+
+
+      const imageData =
+        await normalizeImageForPdf(
+          output,
+          items[index].file,
+          grayscale
+        );
+
+
+      /*
+       * ======================================================
+       * IMAGE-SIZED PDF PAGE
+       * ======================================================
+       *
+       * Instead of creating:
+       *
+       * 595 x 842 A4 page
+       *
+       * we make the PDF page EXACTLY match the image.
+       *
+       * This removes:
+       *
+       * - white borders
+       * - page margins
+       * - A4 padding
+       * - letterboxing
+       */
+
+
+      const pageWidth =
+        imageData.width;
+
+
+      const pageHeight =
+        imageData.height;
+
+
+      const page =
+        output.addPage([
+          pageWidth,
+          pageHeight
+        ]);
+
+
+      /*
+       * Image starts at the exact bottom-left corner
+       * and fills 100% of the PDF page.
+       */
+
+      page.drawImage(
+        imageData.embedded,
+        {
+
+          x:
+            0,
+
+          y:
+            0,
+
+          width:
+            pageWidth,
+
+          height:
+            pageHeight
+
+        }
+      );
+
+    }
+
+
+    const bytes =
+      await output.save();
+
+
+    downloadBytes(
+      bytes,
+      filename,
+      "application/pdf"
+    );
+
+
+    showToast(
+      "PDF ready."
+    );
+
+  }
+  catch (error) {
+
+    console.error(
+      error
+    );
+
+
+    showToast(
+      "Could not build this PDF."
+    );
+
+  }
+  finally {
+
+    hideProcessing();
+
+  }
+
+}
   /* ==========================================================
      12. IMAGES → PDF
      ========================================================== */
@@ -3244,16 +3251,39 @@
 
 })();
 
-
 /* ============================================================
    MAZEDOCS V2 — UNIVERSAL CONVERTER
-   Uses one stable /api endpoint for Vercel compatibility.
-   Output choices are defined locally so the picker always renders.
+   200 MB FRONTEND FLOW
+
+   SMALL FILES:
+     Browser -> POST /api -> converted result
+
+   LARGE FILES:
+     Browser -> direct object-storage upload
+             -> POST /api/large-convert with file URL
+             -> converted result is stored outside the Function
+             -> browser downloads from returned URL
+
+   WHY:
+   Vercel Functions cannot receive a 200 MB multipart request.
+   This file therefore NEVER sends large binaries to /api.
+
+   REQUIRED SERVER ENDPOINTS FOR LARGE FILES:
+     POST /api/large-upload/init
+     POST /api/large-convert
+
+   The large-upload endpoint should return a signed/direct upload URL.
+   The large-convert endpoint should return a download URL for the
+   converted file. Vercel Blob can be used behind those endpoints.
    ============================================================ */
 
 (() => {
   "use strict";
 
+
+  /* ==========================================================
+     01. ELEMENTS
+     ========================================================== */
 
   const $ = (selector) => {
     return document.querySelector(
@@ -3323,6 +3353,10 @@
     $("#toast");
 
 
+  /*
+   * This controller is only loaded on pages that contain
+   * the Universal Converter UI.
+   */
   if (
     !converterInput
     ||
@@ -3332,6 +3366,35 @@
   }
 
 
+  /* ==========================================================
+     02. LIMITS / ENDPOINTS
+     ========================================================== */
+
+  /*
+   * User-facing maximum.
+   *
+   * 200 MiB = 209,715,200 bytes.
+   */
+  const MAX_CONVERTER_FILE_BYTES =
+    200 * 1024 * 1024;
+
+
+  /*
+   * Stay safely below Vercel Function's request-body ceiling.
+   *
+   * Files at or below this value may use your normal POST /api.
+   * Larger files MUST bypass the Function body with direct upload.
+   */
+  const DIRECT_API_LIMIT_BYTES =
+    4 * 1024 * 1024;
+
+
+  /*
+   * Optional external API base.
+   *
+   * Leave window.MAZEDOCS_API_BASE undefined when frontend and
+   * backend live on the same domain.
+   */
   const API_BASE =
     String(
       window.MAZEDOCS_API_BASE
@@ -3344,11 +3407,30 @@
 
 
   /*
-   * Keeping the format map in the frontend makes the picker
-   * independent from route-discovery requests.
+   * These two endpoints are required for files larger than 4 MB.
    *
-   * The server performs the final validation before conversion.
+   * /api/large-upload/init:
+   *   receives only metadata
+   *   returns a signed/direct storage upload URL
+   *
+   * /api/large-convert:
+   *   receives only source URL + target format
+   *   downloads/converts server-side
+   *   stores the result
+   *   returns a download URL
    */
+  const LARGE_UPLOAD_INIT_ENDPOINT =
+    `${API_BASE}/api/large-upload/init`;
+
+
+  const LARGE_CONVERT_ENDPOINT =
+    `${API_BASE}/api/large-convert`;
+
+
+  /* ==========================================================
+     03. SUPPORTED ROUTES
+     ========================================================== */
+
   const ROUTES = {
     pdf: [
       {
@@ -3359,7 +3441,7 @@
           "Word document (.docx)",
 
         description:
-          "Editable Word document with extracted text and available images."
+          "Creates an editable Word document from PDF text and available images."
       },
 
       {
@@ -3370,7 +3452,7 @@
           "PowerPoint (.pptx)",
 
         description:
-          "Creates one PowerPoint slide from each PDF page."
+          "Creates a PowerPoint presentation with one slide for each PDF page."
       },
 
       {
@@ -3381,7 +3463,7 @@
           "Plain text (.txt)",
 
         description:
-          "Extracts readable text from every PDF page."
+          "Extracts readable text from the PDF."
       },
 
       {
@@ -3416,7 +3498,7 @@
           "PDF document (.pdf)",
 
         description:
-          "Creates a PDF. LibreOffice gives the best layout fidelity when available."
+          "Creates a PDF from the Word document."
       },
 
       {
@@ -3427,7 +3509,7 @@
           "Plain text (.txt)",
 
         description:
-          "Extracts the readable text from the Word document."
+          "Extracts readable text from the Word document."
       },
 
       {
@@ -3438,7 +3520,7 @@
           "HTML page (.html)",
 
         description:
-          "Converts Word paragraphs and tables into simple HTML."
+          "Converts common Word paragraphs and tables into HTML."
       }
     ],
 
@@ -3451,7 +3533,7 @@
           "Word document (.docx)",
 
         description:
-          "Upgrades a legacy .doc file to modern Word format.",
+          "Upgrades the legacy Word file to modern DOCX.",
 
         requiresLibreOffice:
           true
@@ -3465,7 +3547,7 @@
           "PDF document (.pdf)",
 
         description:
-          "Converts a legacy Word document to PDF.",
+          "Converts the legacy Word file to PDF.",
 
         requiresLibreOffice:
           true
@@ -3479,7 +3561,7 @@
           "Plain text (.txt)",
 
         description:
-          "Extracts text from a legacy Word document.",
+          "Extracts text from the legacy Word file.",
 
         requiresLibreOffice:
           true
@@ -3495,7 +3577,7 @@
           "Word handout (.docx)",
 
         description:
-          "Creates an editable Word handout from slide text, tables, and available images."
+          "Creates an editable Word handout from slide content."
       },
 
       {
@@ -3530,7 +3612,7 @@
           "Word handout (.docx)",
 
         description:
-          "Converts a legacy PowerPoint into an editable Word handout.",
+          "Converts the legacy PowerPoint into an editable Word handout.",
 
         requiresLibreOffice:
           true
@@ -3544,7 +3626,7 @@
           "PDF document (.pdf)",
 
         description:
-          "Converts a legacy PowerPoint directly to PDF.",
+          "Converts the legacy PowerPoint to PDF.",
 
         requiresLibreOffice:
           true
@@ -3558,7 +3640,7 @@
           "Plain text (.txt)",
 
         description:
-          "Extracts slide text from a legacy PowerPoint.",
+          "Extracts slide text from the legacy PowerPoint.",
 
         requiresLibreOffice:
           true
@@ -3574,7 +3656,7 @@
           "CSV data (.csv / .zip)",
 
         description:
-          "Exports workbook data as CSV. Multi-sheet files may download as a ZIP."
+          "Exports workbook data as CSV."
       },
 
       {
@@ -3609,7 +3691,7 @@
           "Excel workbook (.xlsx)",
 
         description:
-          "Upgrades a legacy .xls workbook to modern Excel format.",
+          "Upgrades the legacy XLS workbook to XLSX.",
 
         requiresLibreOffice:
           true
@@ -3691,7 +3773,7 @@
           "CSV data (.csv)",
 
         description:
-          "Flattens common JSON records into a CSV table."
+          "Converts common JSON records into CSV."
       },
 
       {
@@ -3702,7 +3784,7 @@
           "Excel workbook (.xlsx)",
 
         description:
-          "Turns common JSON records into an Excel workbook."
+          "Converts common JSON records into an Excel workbook."
       }
     ],
 
@@ -3750,7 +3832,7 @@
           "Word document (.docx)",
 
         description:
-          "Turns Markdown into a simple editable Word document."
+          "Turns Markdown into an editable Word document."
       },
 
       {
@@ -3761,7 +3843,7 @@
           "PDF document (.pdf)",
 
         description:
-          "Turns Markdown text into a printable PDF."
+          "Turns Markdown into a printable PDF."
       }
     ],
 
@@ -3785,7 +3867,7 @@
           "Word document (.docx)",
 
         description:
-          "Converts common headings, paragraphs, and lists into Word."
+          "Converts common HTML content into Word."
       },
 
       {
@@ -3796,7 +3878,7 @@
           "PDF document (.pdf)",
 
         description:
-          "Creates a printable PDF from the page text."
+          "Creates a printable PDF from HTML content."
       }
     ],
 
@@ -3820,7 +3902,7 @@
           "Word document (.docx)",
 
         description:
-          "Converts common headings, paragraphs, and lists into Word."
+          "Converts common HTML content into Word."
       },
 
       {
@@ -3831,7 +3913,7 @@
           "PDF document (.pdf)",
 
         description:
-          "Creates a printable PDF from the page text."
+          "Creates a printable PDF from HTML content."
       }
     ],
 
@@ -3844,7 +3926,7 @@
           "PNG image (.png)",
 
         description:
-          "Converts the JPEG image to PNG."
+          "Converts JPEG to PNG."
       },
 
       {
@@ -3855,7 +3937,7 @@
           "WEBP image (.webp)",
 
         description:
-          "Converts the JPEG image to WEBP."
+          "Converts JPEG to WEBP."
       },
 
       {
@@ -3866,7 +3948,7 @@
           "PDF document (.pdf)",
 
         description:
-          "Uses the image itself as the PDF page with no document margins."
+          "Uses the image itself as a PDF page without A4 margins."
       }
     ],
 
@@ -3879,7 +3961,7 @@
           "PNG image (.png)",
 
         description:
-          "Converts the JPEG image to PNG."
+          "Converts JPEG to PNG."
       },
 
       {
@@ -3890,7 +3972,7 @@
           "WEBP image (.webp)",
 
         description:
-          "Converts the JPEG image to WEBP."
+          "Converts JPEG to WEBP."
       },
 
       {
@@ -3901,7 +3983,7 @@
           "PDF document (.pdf)",
 
         description:
-          "Uses the image itself as the PDF page with no document margins."
+          "Uses the image itself as a PDF page without A4 margins."
       }
     ],
 
@@ -3914,7 +3996,7 @@
           "JPG image (.jpg)",
 
         description:
-          "Converts PNG to JPEG. Transparent pixels become white because JPEG has no transparency."
+          "Converts PNG to JPEG. JPEG does not preserve transparency."
       },
 
       {
@@ -3936,7 +4018,7 @@
           "PDF document (.pdf)",
 
         description:
-          "Uses the image itself as the PDF page with no extra margins."
+          "Uses the image itself as a PDF page without extra margins."
       }
     ],
 
@@ -3971,7 +4053,7 @@
           "PDF document (.pdf)",
 
         description:
-          "Uses the image itself as the PDF page with no extra margins."
+          "Uses the image itself as a PDF page without extra margins."
       }
     ],
 
@@ -4006,11 +4088,15 @@
           "PDF document (.pdf)",
 
         description:
-          "Uses the HEIC photo itself as the PDF page."
+          "Uses the HEIC photo as a PDF page."
       }
     ]
   };
 
+
+  /* ==========================================================
+     04. STATE
+     ========================================================== */
 
   const state = {
     file:
@@ -4029,6 +4115,10 @@
       false
   };
 
+
+  /* ==========================================================
+     05. HELPERS
+     ========================================================== */
 
   function extensionOf(file) {
     const name =
@@ -4054,13 +4144,26 @@
   }
 
 
-  function formatBytes(bytes) {
-    if (bytes < 1024) {
+  function formatFileSize(bytes) {
+    if (
+      !Number.isFinite(
+        bytes
+      )
+    ) {
+      return "—";
+    }
+
+
+    if (
+      bytes < 1024
+    ) {
       return `${bytes} B`;
     }
 
 
-    if (bytes < 1024 * 1024) {
+    if (
+      bytes < 1024 * 1024
+    ) {
       return `${(bytes / 1024).toFixed(1)} KB`;
     }
 
@@ -4096,10 +4199,58 @@
             "is-visible"
           );
         },
-        2800
+        3000
       );
   }
 
+
+  function sanitizeDownloadName(
+    name,
+    fallback
+  ) {
+    const clean =
+      String(
+        name || ""
+      )
+        .replace(
+          /[<>:"/\\|?*\u0000-\u001F]/g,
+          "-"
+        )
+        .trim();
+
+
+    return (
+      clean
+      ||
+      fallback
+    );
+  }
+
+
+  function setRunButton(
+    label,
+    disabled = true
+  ) {
+    runButton.textContent =
+      label;
+
+
+    runButton.disabled =
+      disabled;
+  }
+
+
+  function setConversionMessage(
+    message
+  ) {
+    selectedDescription.textContent =
+      message;
+  }
+
+
+  /* ==========================================================
+     06. ENGINE STATUS
+     ========================================================== */
 
   function setEngineStatus(
     online,
@@ -4148,7 +4299,7 @@
       small.textContent =
         message
         ||
-        "Start the MazeDocs Python server or redeploy the backend.";
+        "Start the MazeDocs converter backend or redeploy the API.";
 
 
       return;
@@ -4161,19 +4312,16 @@
 
 
       small.textContent =
-        "LibreOffice detected · modern and legacy Office routes are ready.";
-
-
-      return;
+        "LibreOffice detected · files up to 200 MB can use the large-file route.";
     }
+    else {
+      strong.textContent =
+        "Portable conversion engine online";
 
 
-    strong.textContent =
-      "Portable conversion engine online";
-
-
-    small.textContent =
-      "PDF, modern Office, data, text, and image routes are ready.";
+      small.textContent =
+        "Modern formats are ready · legacy .doc, .ppt, and .xls need LibreOffice.";
+    }
   }
 
 
@@ -4235,6 +4383,10 @@
   }
 
 
+  /* ==========================================================
+     07. TARGET PICKER
+     ========================================================== */
+
   function resetTargetPicker() {
     state.target =
       "";
@@ -4245,7 +4397,7 @@
 
 
     targetLabel.textContent =
-      "Choose an output!";
+      "Choose an output format.";
 
 
     targetDescription.textContent =
@@ -4361,16 +4513,17 @@
 
 
     if (
-      !state.apiOnline
+      state.file.size >
+      DIRECT_API_LIMIT_BYTES
     ) {
       routeNote.textContent =
-        "Formats are available, but the converter API is currently offline.";
+        `Large-file mode · ${formatFileSize(state.file.size)} will upload directly to storage before conversion.`;
     }
     else if (
       state.libreOffice
     ) {
       routeNote.textContent =
-        "Full engine online · legacy Office formats are enabled.";
+        "Full engine online · direct conversion ready.";
     }
     else {
       routeNote.textContent =
@@ -4381,6 +4534,23 @@
 
   function setFile(file) {
     if (!file) {
+      return;
+    }
+
+
+    if (
+      file.size >
+      MAX_CONVERTER_FILE_BYTES
+    ) {
+      toast(
+        `Maximum file size is 200 MB. This file is ${formatFileSize(file.size)}.`
+      );
+
+
+      converterInput.value =
+        "";
+
+
       return;
     }
 
@@ -4430,9 +4600,11 @@
 
 
     fileMeta.textContent =
-      formatBytes(
-        file.size
-      );
+      `${formatFileSize(file.size)} · ${
+        file.size > DIRECT_API_LIMIT_BYTES
+          ? "large-file mode"
+          : "direct mode"
+      }`;
 
 
     populateTargets();
@@ -4463,7 +4635,7 @@
 
     if (!route) {
       targetLabel.textContent =
-        "Choose an output!";
+        "Choose an output format.";
 
 
       targetDescription.textContent =
@@ -4514,12 +4686,25 @@
       selectedDescription.textContent =
         `${route.description} The converter API is currently offline.`;
     }
+    else if (
+      state.file
+      &&
+      state.file.size >
+      DIRECT_API_LIMIT_BYTES
+    ) {
+      selectedDescription.textContent =
+        `${route.description} Large-file mode will be used automatically.`;
+    }
 
 
     action.hidden =
       false;
   }
 
+
+  /* ==========================================================
+     08. RESPONSE HELPERS
+     ========================================================== */
 
   async function readErrorResponse(
     response
@@ -4547,11 +4732,13 @@
           ||
           data.message
           ||
-          `Conversion failed (${response.status}).`
+          data.error
+          ||
+          `Request failed (${response.status}).`
         );
       }
       catch {
-        return `Conversion failed (${response.status}).`;
+        return `Request failed (${response.status}).`;
       }
     }
 
@@ -4565,20 +4752,644 @@
         text
       )
     ) {
-      return "The converter endpoint was not reached. Redeploy the updated MazeDocs backend.";
+      return "The expected MazeDocs API endpoint was not reached.";
     }
 
 
     return (
       text.trim().slice(
         0,
-        180
+        220
       )
       ||
-      `Conversion failed (${response.status}).`
+      `Request failed (${response.status}).`
     );
   }
 
+
+  function filenameFromDisposition(
+    response,
+    fallback
+  ) {
+    const disposition =
+      response.headers.get(
+        "content-disposition"
+      )
+      ||
+      "";
+
+
+    const encodedMatch =
+      disposition.match(
+        /filename\*=UTF-8''([^;]+)/i
+      );
+
+
+    const plainMatch =
+      disposition.match(
+        /filename="?([^";]+)"?/i
+      );
+
+
+    if (encodedMatch) {
+      return sanitizeDownloadName(
+        decodeURIComponent(
+          encodedMatch[1]
+        ),
+        fallback
+      );
+    }
+
+
+    if (plainMatch) {
+      return sanitizeDownloadName(
+        plainMatch[1],
+        fallback
+      );
+    }
+
+
+    return fallback;
+  }
+
+
+  function downloadBlob(
+    blob,
+    filename
+  ) {
+    const url =
+      URL.createObjectURL(
+        blob
+      );
+
+
+    const link =
+      document.createElement(
+        "a"
+      );
+
+
+    link.href =
+      url;
+
+
+    link.download =
+      filename;
+
+
+    document.body.appendChild(
+      link
+    );
+
+
+    link.click();
+
+    link.remove();
+
+
+    setTimeout(
+      () => {
+        URL.revokeObjectURL(
+          url
+        );
+      },
+      900
+    );
+  }
+
+
+  function downloadFromUrl(
+    url,
+    filename
+  ) {
+    const link =
+      document.createElement(
+        "a"
+      );
+
+
+    link.href =
+      url;
+
+
+    /*
+     * download is honored when the storage URL allows it.
+     * Otherwise the URL opens normally and the provider serves
+     * the file using its own Content-Disposition header.
+     */
+    link.download =
+      filename
+      ||
+      "";
+
+
+    link.rel =
+      "noopener";
+
+
+    document.body.appendChild(
+      link
+    );
+
+
+    link.click();
+
+    link.remove();
+  }
+
+
+  /* ==========================================================
+     09. SMALL-FILE CONVERSION
+     ========================================================== */
+
+  async function convertSmallFile() {
+    const form =
+      new FormData();
+
+
+    form.append(
+      "file",
+      state.file
+    );
+
+
+    form.append(
+      "target",
+      state.target
+    );
+
+
+    const response =
+      await fetch(
+        `${API_BASE}/api`,
+        {
+          method:
+            "POST",
+
+          body:
+            form
+        }
+      );
+
+
+    if (!response.ok) {
+      throw new Error(
+        await readErrorResponse(
+          response
+        )
+      );
+    }
+
+
+    const blob =
+      await response.blob();
+
+
+    const fallback =
+      `mazedocs-converted.${state.target}`;
+
+
+    const downloadName =
+      filenameFromDisposition(
+        response,
+        fallback
+      );
+
+
+    downloadBlob(
+      blob,
+      downloadName
+    );
+  }
+
+
+  /* ==========================================================
+     10. LARGE-FILE UPLOAD
+     ========================================================== */
+
+  async function initializeLargeUpload(
+    file
+  ) {
+    const response =
+      await fetch(
+        LARGE_UPLOAD_INIT_ENDPOINT,
+        {
+          method:
+            "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              filename:
+                file.name,
+
+              size:
+                file.size,
+
+              contentType:
+                file.type
+                ||
+                "application/octet-stream"
+            })
+        }
+      );
+
+
+    if (!response.ok) {
+      const message =
+        await readErrorResponse(
+          response
+        );
+
+
+      throw new Error(
+        `${message} Large-file upload is not configured on the backend.`
+      );
+    }
+
+
+    const data =
+      await response.json();
+
+
+    if (
+      !data.uploadUrl
+      ||
+      !(
+        data.fileUrl
+        ||
+        data.sourceUrl
+      )
+    ) {
+      throw new Error(
+        "Large-file upload endpoint returned an incomplete upload session."
+      );
+    }
+
+
+    return {
+      uploadUrl:
+        data.uploadUrl,
+
+      sourceUrl:
+        data.fileUrl
+        ||
+        data.sourceUrl,
+
+      method:
+        data.method
+        ||
+        "PUT",
+
+      headers:
+        data.headers
+        ||
+        {},
+
+      uploadId:
+        data.uploadId
+        ||
+        null
+    };
+  }
+
+
+  function uploadFileDirectly(
+    file,
+    session,
+    onProgress
+  ) {
+    return new Promise(
+      (resolve, reject) => {
+        const request =
+          new XMLHttpRequest();
+
+
+        request.open(
+          session.method,
+          session.uploadUrl,
+          true
+        );
+
+
+        Object.entries(
+          session.headers
+          ||
+          {}
+        ).forEach(
+          ([name, value]) => {
+            request.setRequestHeader(
+              name,
+              String(value)
+            );
+          }
+        );
+
+
+        /*
+         * Do NOT manually set Content-Length.
+         * Browsers control that header.
+         *
+         * Only set Content-Type when the signed upload expects it.
+         */
+        if (
+          !Object.keys(
+            session.headers
+            ||
+            {}
+          ).some(
+            (name) =>
+              name.toLowerCase()
+              ===
+              "content-type"
+          )
+          &&
+          file.type
+        ) {
+          try {
+            request.setRequestHeader(
+              "Content-Type",
+              file.type
+            );
+          }
+          catch {
+            /*
+             * Some signed URLs require the exact headers supplied
+             * by the server. In that case the browser upload can
+             * proceed without adding Content-Type here.
+             */
+          }
+        }
+
+
+        request.upload.addEventListener(
+          "progress",
+          (event) => {
+            if (
+              !event.lengthComputable
+            ) {
+              return;
+            }
+
+
+            const percent =
+              Math.round(
+                (
+                  event.loaded /
+                  event.total
+                )
+                *
+                100
+              );
+
+
+            onProgress?.(
+              percent
+            );
+          }
+        );
+
+
+        request.addEventListener(
+          "load",
+          () => {
+            if (
+              request.status >= 200
+              &&
+              request.status < 300
+            ) {
+              resolve();
+            }
+            else {
+              reject(
+                new Error(
+                  `Direct upload failed (${request.status}).`
+                )
+              );
+            }
+          }
+        );
+
+
+        request.addEventListener(
+          "error",
+          () => {
+            reject(
+              new Error(
+                "Direct upload failed because of a network or storage error."
+              )
+            );
+          }
+        );
+
+
+        request.addEventListener(
+          "abort",
+          () => {
+            reject(
+              new Error(
+                "Direct upload was cancelled."
+              )
+            );
+          }
+        );
+
+
+        request.send(
+          file
+        );
+      }
+    );
+  }
+
+
+  /* ==========================================================
+     11. LARGE-FILE CONVERSION
+     ========================================================== */
+
+  async function requestLargeConversion(
+    sourceUrl,
+    uploadId
+  ) {
+    const response =
+      await fetch(
+        LARGE_CONVERT_ENDPOINT,
+        {
+          method:
+            "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              sourceUrl,
+              sourceName:
+                state.file.name,
+
+              sourceExtension:
+                state.source,
+
+              target:
+                state.target,
+
+              uploadId:
+                uploadId
+                ||
+                null
+            })
+        }
+      );
+
+
+    if (!response.ok) {
+      throw new Error(
+        await readErrorResponse(
+          response
+        )
+      );
+    }
+
+
+    const contentType =
+      response.headers.get(
+        "content-type"
+      )
+      ||
+      "";
+
+
+    /*
+     * Large mode is expected to return JSON with a storage URL.
+     *
+     * Returning the converted 50 MB / 100 MB file through the
+     * Vercel Function would simply hit the response-size limit.
+     */
+    if (
+      !contentType.includes(
+        "application/json"
+      )
+    ) {
+      throw new Error(
+        "Large-file conversion must return a download URL instead of the converted binary."
+      );
+    }
+
+
+    const data =
+      await response.json();
+
+
+    const downloadUrl =
+      data.downloadUrl
+      ||
+      data.download_url
+      ||
+      data.url;
+
+
+    if (!downloadUrl) {
+      throw new Error(
+        "Conversion finished but the backend did not return a download URL."
+      );
+    }
+
+
+    return {
+      downloadUrl,
+
+      filename:
+        sanitizeDownloadName(
+          data.filename
+          ||
+          data.name,
+          `mazedocs-converted.${state.target}`
+        )
+    };
+  }
+
+
+  async function convertLargeFile() {
+    setRunButton(
+      "Preparing upload…"
+    );
+
+
+    setConversionMessage(
+      `Preparing ${formatFileSize(state.file.size)} for large-file conversion…`
+    );
+
+
+    const session =
+      await initializeLargeUpload(
+        state.file
+      );
+
+
+    setRunButton(
+      "Uploading 0%…"
+    );
+
+
+    await uploadFileDirectly(
+      state.file,
+      session,
+      (percent) => {
+        setRunButton(
+          `Uploading ${percent}%…`
+        );
+
+
+        setConversionMessage(
+          `Uploading directly to storage · ${percent}%`
+        );
+      }
+    );
+
+
+    setRunButton(
+      "Converting…"
+    );
+
+
+    setConversionMessage(
+      "Upload complete. MazeDocs is converting the stored file…"
+    );
+
+
+    const result =
+      await requestLargeConversion(
+        session.sourceUrl,
+        session.uploadId
+      );
+
+
+    setRunButton(
+      "Opening download…"
+    );
+
+
+    setConversionMessage(
+      "Conversion complete. Opening the generated file…"
+    );
+
+
+    downloadFromUrl(
+      result.downloadUrl,
+      result.filename
+    );
+  }
+
+
+  /* ==========================================================
+     12. MAIN CONVERT ACTION
+     ========================================================== */
 
   async function convertFile() {
     if (
@@ -4607,16 +5418,47 @@
     }
 
 
-    const originalText =
+    if (
+      state.file.size >
+      MAX_CONVERTER_FILE_BYTES
+    ) {
+      toast(
+        "MazeDocs currently supports files up to 200 MB."
+      );
+
+
+      return;
+    }
+
+
+    const route =
+      selectedRouteDefinition();
+
+
+    if (
+      route?.requiresLibreOffice
+      &&
+      !state.libreOffice
+    ) {
+      toast(
+        "This conversion requires LibreOffice."
+      );
+
+
+      return;
+    }
+
+
+    const originalHtml =
       runButton.innerHTML;
+
+
+    const originalDescription =
+      selectedDescription.textContent;
 
 
     runButton.disabled =
       true;
-
-
-    runButton.textContent =
-      "Converting…";
 
 
     action.classList.add(
@@ -4625,128 +5467,25 @@
 
 
     try {
-      const form =
-        new FormData();
-
-
-      form.append(
-        "file",
-        state.file
-      );
-
-
-      form.append(
-        "target",
-        state.target
-      );
-
-
-      /*
-       * POST to /api instead of /api/convert.
-       *
-       * This uses the same Vercel Python function URL that
-       * already works for the API health check.
-       */
-      const response =
-        await fetch(
-          `${API_BASE}/api`,
-          {
-            method:
-              "POST",
-
-            body:
-              form
-          }
+      if (
+        state.file.size <=
+        DIRECT_API_LIMIT_BYTES
+      ) {
+        setRunButton(
+          "Converting…"
         );
 
 
-      if (!response.ok) {
-        throw new Error(
-          await readErrorResponse(
-            response
-          )
+        setConversionMessage(
+          "Converting directly…"
         );
+
+
+        await convertSmallFile();
       }
-
-
-      const blob =
-        await response.blob();
-
-
-      const disposition =
-        response.headers.get(
-          "content-disposition"
-        )
-        ||
-        "";
-
-
-      const encodedMatch =
-        disposition.match(
-          /filename\*=UTF-8''([^;]+)/i
-        );
-
-
-      const plainMatch =
-        disposition.match(
-          /filename="?([^";]+)"?/i
-        );
-
-
-      let downloadName =
-        `mazedocs-converted.${state.target}`;
-
-
-      if (encodedMatch) {
-        downloadName =
-          decodeURIComponent(
-            encodedMatch[1]
-          );
+      else {
+        await convertLargeFile();
       }
-      else if (plainMatch) {
-        downloadName =
-          plainMatch[1];
-      }
-
-
-      const url =
-        URL.createObjectURL(
-          blob
-        );
-
-
-      const link =
-        document.createElement(
-          "a"
-        );
-
-
-      link.href =
-        url;
-
-
-      link.download =
-        downloadName;
-
-
-      document.body.appendChild(
-        link
-      );
-
-
-      link.click();
-
-      link.remove();
-
-
-      setTimeout(
-        () => {
-          URL.revokeObjectURL(
-            url
-          );
-        },
-        700
-      );
 
 
       toast(
@@ -4759,15 +5498,40 @@
       );
 
 
-      toast(
+      /*
+       * Make the common configuration mistake very obvious.
+       */
+      if (
+        state.file.size >
+        DIRECT_API_LIMIT_BYTES
+        &&
+        /large-file|upload|endpoint|404|405/i.test(
+          error.message
+          ||
+          ""
+        )
+      ) {
+        toast(
+          "Large-file backend is not configured yet."
+        );
+      }
+      else {
+        toast(
+          error.message
+          ||
+          "Conversion failed."
+        );
+      }
+
+
+      selectedDescription.textContent =
         error.message
         ||
-        "Conversion failed."
-      );
+        originalDescription;
     }
     finally {
       runButton.innerHTML =
-        originalText;
+        originalHtml;
 
 
       runButton.disabled =
@@ -4779,10 +5543,17 @@
       );
 
 
+      /*
+       * Re-apply route availability after restoring the button.
+       */
       updateSelectedTarget();
     }
   }
 
+
+  /* ==========================================================
+     13. DROP ZONE / EVENTS
+     ========================================================== */
 
   function attachDropZone() {
     [
