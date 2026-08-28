@@ -1,106 +1,169 @@
-# MazeDocs V1
+# MazeDocs V2 — Student Utility OS
 
-MazeDocs V1 is a free, local-first student document toolkit.
+MazeDocs V2 keeps every V1 PDF/student utility and adds a **Universal Converter**.
 
-## Included tools
+## V1 tools still included
 
-- Merge PDFs
-- Organize PDF pages
-- Reorder pages by dragging
-- Rotate pages
-- Delete pages
-- Extract selected pages
+- Merge PDF
+- Organize / reorder PDF pages
+- Rotate, delete, and extract pages
 - Compress image-heavy PDFs
-- Images to PDF
-- Phone camera / Scan to PDF
-- Optional grayscale scan output
-- OCR for images
-- OCR for scanned PDFs
-- Copy / download extracted text
-- Assignment Builder for combining PDFs and images
+- Images → PDF
+- Scan / camera → PDF
+- OCR images and PDFs
+- Assignment Builder
 
-## V2
+## New in V2
 
-The universal file-converter suite is intentionally reserved for MazeDocs V2.
+### PDF
 
-Planned V2 examples:
+- PDF → DOCX
+- PDF → PPTX
+- PDF → TXT
+- PDF → PNG pages (ZIP)
+- PDF → JPG pages (ZIP)
+
+### Word
+
+- DOCX → PDF
+- DOCX → TXT
+- DOCX → HTML
+- DOC → DOCX / PDF / TXT with LibreOffice
+
+### PowerPoint
+
+- PPTX → DOCX
+- PPTX → PDF
+- PPTX → TXT
+- PPT → DOCX / PDF / TXT with LibreOffice
+
+`PPTX → DOCX` creates a Word handout with slide headings, extracted slide text, tables, and available slide images.
+
+### Spreadsheets / data
+
+- XLSX → CSV
+- XLSX → JSON
+- XLSX → PDF
+- XLS → XLSX / CSV / JSON / PDF with LibreOffice
+- CSV → XLSX / JSON
+- JSON → CSV / XLSX
+
+### Text / web
+
+- TXT → DOCX / PDF
+- Markdown → HTML / DOCX / PDF
+- HTML → TXT / DOCX / PDF
+
+### Images
+
+- JPG / PNG / WEBP / HEIC → common image formats
+- JPG / PNG / WEBP / HEIC → PDF
+
+## Two conversion modes
+
+### Portable engine
+
+Pure Python routes work without LibreOffice, including the important V2 routes:
 
 - PDF → Word
 - PDF → PowerPoint
-- Word → PDF
-- PowerPoint → Word
-- PowerPoint → PDF
-- Excel / CSV conversion tools
-- More common student file conversions
+- PPTX → Word
+- PDF → images
+- spreadsheet/data conversions
+- image conversions
 
-## Run locally
+Modern Office → PDF routes have a basic pure-Python fallback if LibreOffice is missing.
 
-MazeDocs V1 is static and does not require Python.
+### Full engine
 
-Recommended:
+Legacy `.doc`, `.ppt`, and `.xls` require LibreOffice.
 
-1. Open the folder in VS Code.
-2. Use the Live Server extension.
-3. Open `index.html`.
+The included `Dockerfile` installs LibreOffice so the full engine works on a Docker host such as Render or Railway.
 
-You can also run:
+## Run locally on Windows
 
-```bash
-python -m http.server 5500
+From the MazeDocs V2 folder:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m uvicorn server:app --reload --port 8000
 ```
 
-Then visit:
+Open:
 
 ```text
-http://localhost:5500
+http://127.0.0.1:8000
 ```
 
-## Deploy to Vercel
+API health:
 
-From the MazeDocs folder:
-
-```bash
-vercel
+```text
+http://127.0.0.1:8000/api
 ```
 
-Then deploy production:
+### Optional: enable legacy .doc / .ppt / .xls locally
 
-```bash
-vercel --prod
+Install LibreOffice. MazeDocs checks common Windows locations automatically, including:
+
+```text
+C:\Program Files\LibreOffice\program\soffice.exe
 ```
 
-Or force a fresh production build:
+Restart the server and `/api` should show:
 
-```bash
+```json
+"libreoffice_available": true
+```
+
+## Vercel
+
+The root still includes `vercel.json` and `api/index.py`.
+
+You can deploy with:
+
+```powershell
 vercel --prod --force
 ```
 
-## Privacy
+Important: Vercel does **not** provide LibreOffice in the normal Python runtime, so legacy `.doc`, `.ppt`, and `.xls` routes will be disabled there. Vercel request-body limits can also be lower than MazeDocs' own 25 MB application limit.
 
-Core document processing happens locally in the browser. MazeDocs V1 does not have a file-upload backend.
+For the complete V2 conversion engine, use the Docker deployment.
 
-It loads these browser libraries from public CDNs:
+## Docker / Render / Railway
 
-- pdf-lib
-- PDF.js
-- Tesseract.js
-- SortableJS
-- Anime.js
-- Lenis
+Build locally:
 
-## Compression note
+```powershell
+docker build -t mazedocs-v2 .
+docker run -p 8000:8000 mazedocs-v2
+```
 
-V1 PDF compression is intended mainly for scanned or image-heavy school PDFs.
+Then open:
 
-It renders each PDF page as a JPEG and rebuilds the document. This may reduce file size considerably, but selectable/searchable text becomes flattened into an image.
+```text
+http://localhost:8000
+```
 
-## Mobile
+The Docker image includes LibreOffice Writer, Impress, and Calc.
 
-The interface is optimized for phone widths including:
+## GitHub release
 
-- 360 × 800
-- 390 × 844
-- 430 × 932
+Recommended V2 tag:
 
-The Scan tool uses `capture="environment"` where supported so phones can open the rear camera.
-## v1
+```powershell
+git add .
+git commit -m "Release MazeDocs V2"
+git tag -a v2.0.0 -m "MazeDocs V2"
+git push origin main
+git push origin v2.0.0
+```
+
+## Conversion quality notes
+
+- **PDF → DOCX:** designed for editable output. Highly complex PDF layouts may shift because PDFs do not store Word-style document structure.
+- **PDF → PPTX:** prioritizes visual fidelity by putting each PDF page onto its own PowerPoint slide.
+- **PPTX → DOCX:** creates an editable study/handout document, rather than trying to reproduce the slide canvas exactly.
+- **Office → PDF:** LibreOffice provides the best results. Portable fallback output is intentionally simpler.

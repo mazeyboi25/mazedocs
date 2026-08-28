@@ -8,7 +8,6 @@
    - Images to PDF
    - Scan photos to PDF
    - OCR images and PDFs
-   - Assignment Builder
 
    Processing is local-first in the browser.
    ============================================================ */
@@ -236,10 +235,7 @@
       [],
 
     ocrFile:
-      null,
-
-    assignmentFiles:
-      []
+      null
   };
 
 
@@ -262,8 +258,8 @@
     ocr:
       "Extract Text",
 
-    assignment:
-      "Assignment Builder"
+    convert:
+      "Universal Converter"
   };
 
 
@@ -468,31 +464,7 @@
       $("#ocr-copy-button"),
 
     ocrDownloadButton:
-      $("#ocr-download-button"),
-
-
-    /* Assignment */
-
-    assignmentInput:
-      $("#assignment-input"),
-
-    assignmentDrop:
-      $("#assignment-drop"),
-
-    assignmentChooseButton:
-      $("#assignment-choose-button"),
-
-    assignmentList:
-      $("#assignment-list"),
-
-    assignmentActions:
-      $("#assignment-actions"),
-
-    assignmentName:
-      $("#assignment-name"),
-
-    assignmentBuildButton:
-      $("#assignment-build-button")
+      $("#ocr-download-button")
   };
 
 
@@ -1607,474 +1579,403 @@
      ========================================================== */
 
   async function normalizeImageForPdf(
-    pdfDocument,
-    file,
-    grayscale
-  ) {
-    const dataUrl =
-      await fileToDataUrl(
-        file
-      );
+  pdfDocument,
+  file,
+  grayscale = false
+) {
 
-
-    const image =
-      await new Promise(
-        (resolve, reject) => {
-
-          const element =
-            new Image();
-
-
-          element.onload =
-            () => resolve(element);
-
-
-          element.onerror =
-            reject;
-
-
-          element.src =
-            dataUrl;
-
-        }
-      );
-
-
-    const maximumDimension =
-      2200;
-
-
-    const scale =
-      Math.min(
-        1,
-        maximumDimension /
-          Math.max(
-            image.naturalWidth,
-            image.naturalHeight
-          )
-      );
-
-
-    const canvas =
-      document.createElement(
-        "canvas"
-      );
-
-
-    canvas.width =
-      Math.max(
-        1,
-        Math.round(
-          image.naturalWidth *
-          scale
-        )
-      );
-
-
-    canvas.height =
-      Math.max(
-        1,
-        Math.round(
-          image.naturalHeight *
-          scale
-        )
-      );
-
-
-    const context =
-      canvas.getContext(
-        "2d",
-        {
-          alpha:
-            false
-        }
-      );
-
-
-    context.fillStyle =
-      "#ffffff";
-
-
-    context.fillRect(
-      0,
-      0,
-      canvas.width,
-      canvas.height
+  const dataUrl =
+    await fileToDataUrl(
+      file
     );
 
 
-    context.drawImage(
-      image,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+  const image =
+    await new Promise(
+      (resolve, reject) => {
+
+        const element =
+          new Image();
 
 
-    if (grayscale) {
-      const imageData =
-        context.getImageData(
-          0,
-          0,
-          canvas.width,
-          canvas.height
-        );
+        element.onload =
+          () => resolve(element);
 
 
-      const pixels =
-        imageData.data;
+        element.onerror =
+          reject;
 
 
-      for (
-        let index = 0;
-        index < pixels.length;
-        index += 4
-      ) {
-        const gray =
-          (
-            pixels[index] *
-            0.299
-          )
-          +
-          (
-            pixels[index + 1] *
-            0.587
-          )
-          +
-          (
-            pixels[index + 2] *
-            0.114
-          );
+        element.src =
+          dataUrl;
 
-
-        pixels[index] =
-          gray;
-
-
-        pixels[index + 1] =
-          gray;
-
-
-        pixels[index + 2] =
-          gray;
       }
+    );
 
 
-      context.putImageData(
-        imageData,
+  /*
+   * Limit extremely large images so the browser does not
+   * consume unnecessary memory.
+   *
+   * IMPORTANT:
+   * We keep the original aspect ratio.
+   */
+
+  const maximumDimension =
+    2600;
+
+
+  const resizeScale =
+    Math.min(
+      1,
+
+      maximumDimension /
+      Math.max(
+        image.naturalWidth,
+        image.naturalHeight
+      )
+    );
+
+
+  const width =
+    Math.max(
+      1,
+
+      Math.round(
+        image.naturalWidth *
+        resizeScale
+      )
+    );
+
+
+  const height =
+    Math.max(
+      1,
+
+      Math.round(
+        image.naturalHeight *
+        resizeScale
+      )
+    );
+
+
+  const canvas =
+    document.createElement(
+      "canvas"
+    );
+
+
+  canvas.width =
+    width;
+
+
+  canvas.height =
+    height;
+
+
+  /*
+   * Keep alpha support enabled.
+   *
+   * DO NOT use:
+   *
+   * { alpha: false }
+   *
+   * because that removes transparency.
+   */
+
+  const context =
+    canvas.getContext(
+      "2d",
+      {
+        alpha: true
+      }
+    );
+
+
+  /*
+   * IMPORTANT:
+   *
+   * Do NOT fill the canvas with white.
+   *
+   * The previous version had:
+   *
+   * context.fillStyle = "#ffffff";
+   * context.fillRect(...);
+   *
+   * That is what permanently created a white background.
+   */
+
+  context.clearRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+
+  context.drawImage(
+    image,
+    0,
+    0,
+    width,
+    height
+  );
+
+
+  /*
+   * Optional grayscale mode.
+   *
+   * Used by the Scan tool.
+   */
+
+  if (grayscale) {
+
+    const imageData =
+      context.getImageData(
         0,
-        0
-      );
-    }
-
-
-    const jpegDataUrl =
-      canvas.toDataURL(
-        "image/jpeg",
-        0.92
-      );
-
-
-    const jpegBytes =
-      await fetch(
-        jpegDataUrl
-      ).then(
-        (response) =>
-          response.arrayBuffer()
-      );
-
-
-    const embedded =
-      await pdfDocument.embedJpg(
-        jpegBytes
-      );
-
-
-    return {
-      embedded,
-
-      width:
+        0,
         canvas.width,
-
-      height:
         canvas.height
-    };
-  }
-
-
-  function addImagesToState(
-    targetArray,
-    files
-  ) {
-    const images =
-      files.filter(
-        isImage
       );
 
 
-    if (!images.length) {
-      showToast(
-        "Choose image files."
-      );
-
-      return;
-    }
+    const pixels =
+      imageData.data;
 
 
-    images.forEach(
-      (file) => {
-
-        targetArray.push({
-          id:
-            makeId(),
-
-          file,
-
-          previewUrl:
-            URL.createObjectURL(
-              file
-            )
-        });
-
-      }
-    );
-  }
-
-
-  function revokePreview(item) {
-    if (
-      item?.previewUrl
+    for (
+      let index = 0;
+      index < pixels.length;
+      index += 4
     ) {
-      URL.revokeObjectURL(
-        item.previewUrl
-      );
-    }
-  }
+
+      const gray =
+        (
+          pixels[index] *
+          0.299
+        )
+        +
+        (
+          pixels[index + 1] *
+          0.587
+        )
+        +
+        (
+          pixels[index + 2] *
+          0.114
+        );
 
 
-  function createImageCard(
-    item,
-    index,
-    onRemove
-  ) {
-    const card =
-      document.createElement(
-        "article"
-      );
+      pixels[index] =
+        gray;
 
 
-    card.className =
-      "image-card";
+      pixels[index + 1] =
+        gray;
 
 
-    card.dataset.id =
-      item.id;
+      pixels[index + 2] =
+        gray;
 
-
-    card.innerHTML = `
-      <div class="image-card__preview">
-        <img alt="" />
-      </div>
-
-      <div class="image-card__footer">
-        <span></span>
-
-        <button
-          class="file-remove"
-          type="button"
-          aria-label="Remove image"
-        >
-          ×
-        </button>
-      </div>
-    `;
-
-
-    card
-      .querySelector("img")
-      .src =
-        item.previewUrl;
-
-
-    card
-      .querySelector(".image-card__footer span")
-      .textContent =
-        `${String(index + 1).padStart(2, "0")} · ${item.file.name}`;
-
-
-    card
-      .querySelector(".file-remove")
-      .addEventListener(
-        "click",
-        onRemove
-      );
-
-
-    return card;
-  }
-
-
-  async function buildPdfFromImages(
-    items,
-    filename,
-    grayscale
-  ) {
-    if (!items.length) {
-      showToast(
-        "Add at least one image."
-      );
-
-      return;
     }
 
 
-    showProcessing(
-      "Building PDF.",
-      "Turning images into document pages."
+    context.putImageData(
+      imageData,
+      0,
+      0
+    );
+
+  }
+
+
+  /*
+   * Convert everything through PNG.
+   *
+   * PNG is used instead of JPEG because:
+   *
+   * - PNG supports transparency
+   * - no artificial white background
+   * - works consistently for JPG / PNG / WEBP input
+   */
+
+  const pngDataUrl =
+    canvas.toDataURL(
+      "image/png"
     );
 
 
-    try {
-      const output =
-        await PDFLib.PDFDocument.create();
+  const pngBytes =
+    await fetch(
+      pngDataUrl
+    ).then(
+      (response) =>
+        response.arrayBuffer()
+    );
 
 
-      for (
-        let index = 0;
-        index < items.length;
-        index += 1
-      ) {
-        elements.processingDetail.textContent =
-          `Adding image ${index + 1} of ${items.length}.`;
+  const embedded =
+    await pdfDocument.embedPng(
+      pngBytes
+    );
 
 
-        const normalized =
-          await normalizeImageForPdf(
-            output,
-            items[index].file,
-            grayscale
-          );
+  return {
+
+    embedded,
+
+    width,
+
+    height
+
+  };
+
+}
+  async function buildPdfFromImages(
+  items,
+  filename,
+  grayscale = false
+) {
+
+  if (!items.length) {
+
+    showToast(
+      "Add at least one image."
+    );
 
 
-        const landscape =
-          normalized.width >
-          normalized.height;
+    return;
 
-
-        const pageWidth =
-          landscape
-            ? 842
-            : 595;
-
-
-        const pageHeight =
-          landscape
-            ? 595
-            : 842;
-
-
-        const margin =
-          28;
-
-
-        const scale =
-          Math.min(
-            (
-              pageWidth -
-              margin *
-              2
-            )
-            /
-            normalized.width,
-
-            (
-              pageHeight -
-              margin *
-              2
-            )
-            /
-            normalized.height
-          );
-
-
-        const drawWidth =
-          normalized.width *
-          scale;
-
-
-        const drawHeight =
-          normalized.height *
-          scale;
-
-
-        const page =
-          output.addPage([
-            pageWidth,
-            pageHeight
-          ]);
-
-
-        page.drawImage(
-          normalized.embedded,
-          {
-            x:
-              (
-                pageWidth -
-                drawWidth
-              )
-              /
-              2,
-
-            y:
-              (
-                pageHeight -
-                drawHeight
-              )
-              /
-              2,
-
-            width:
-              drawWidth,
-
-            height:
-              drawHeight
-          }
-        );
-      }
-
-
-      const bytes =
-        await output.save();
-
-
-      downloadBytes(
-        bytes,
-        filename,
-        "application/pdf"
-      );
-
-
-      showToast(
-        "PDF ready."
-      );
-    }
-    catch (error) {
-      console.error(
-        error
-      );
-
-
-      showToast(
-        "Could not build this PDF."
-      );
-    }
-    finally {
-      hideProcessing();
-    }
   }
 
 
+  showProcessing(
+    "Building PDF.",
+    "Turning each image directly into a PDF page."
+  );
+
+
+  try {
+
+    const output =
+      await PDFLib.PDFDocument.create();
+
+
+    for (
+      let index = 0;
+      index < items.length;
+      index += 1
+    ) {
+
+      elements.processingDetail.textContent =
+        `Adding image ${index + 1} of ${items.length}.`;
+
+
+      const imageData =
+        await normalizeImageForPdf(
+          output,
+          items[index].file,
+          grayscale
+        );
+
+
+      /*
+       * ======================================================
+       * IMAGE-SIZED PDF PAGE
+       * ======================================================
+       *
+       * Instead of creating:
+       *
+       * 595 x 842 A4 page
+       *
+       * we make the PDF page EXACTLY match the image.
+       *
+       * This removes:
+       *
+       * - white borders
+       * - page margins
+       * - A4 padding
+       * - letterboxing
+       */
+
+
+      const pageWidth =
+        imageData.width;
+
+
+      const pageHeight =
+        imageData.height;
+
+
+      const page =
+        output.addPage([
+          pageWidth,
+          pageHeight
+        ]);
+
+
+      /*
+       * Image starts at the exact bottom-left corner
+       * and fills 100% of the PDF page.
+       */
+
+      page.drawImage(
+        imageData.embedded,
+        {
+
+          x:
+            0,
+
+          y:
+            0,
+
+          width:
+            pageWidth,
+
+          height:
+            pageHeight
+
+        }
+      );
+
+    }
+
+
+    const bytes =
+      await output.save();
+
+
+    downloadBytes(
+      bytes,
+      filename,
+      "application/pdf"
+    );
+
+
+    showToast(
+      "PDF ready."
+    );
+
+  }
+  catch (error) {
+
+    console.error(
+      error
+    );
+
+
+    showToast(
+      "Could not build this PDF."
+    );
+
+  }
+  finally {
+
+    hideProcessing();
+
+  }
+
+}
   /* ==========================================================
      12. IMAGES → PDF
      ========================================================== */
@@ -2517,344 +2418,6 @@
 
 
   /* ==========================================================
-     15. ASSIGNMENT BUILDER
-     ========================================================== */
-
-  function addAssignmentFiles(files) {
-    const supported =
-      files.filter(
-        (file) =>
-          isPdf(file)
-          ||
-          isImage(file)
-      );
-
-
-    if (!supported.length) {
-      showToast(
-        "Add PDFs or images."
-      );
-
-      return;
-    }
-
-
-    supported.forEach(
-      (file) => {
-
-        state.assignmentFiles.push({
-          id:
-            makeId(),
-
-          file
-        });
-
-      }
-    );
-
-
-    renderAssignmentFiles();
-  }
-
-
-  function renderAssignmentFiles() {
-    elements.assignmentList.innerHTML =
-      "";
-
-
-    state.assignmentFiles.forEach(
-      (item, index) => {
-
-        const row =
-          document.createElement(
-            "article"
-          );
-
-
-        row.className =
-          "assignment-row";
-
-
-        row.dataset.id =
-          item.id;
-
-
-        row.innerHTML = `
-          <span class="assignment-row__number">
-            ${String(index + 1).padStart(2, "0")}
-          </span>
-
-          <span class="assignment-row__type">
-            ${isPdf(item.file) ? "PDF" : "IMAGE"}
-          </span>
-
-          <div class="assignment-row__info">
-            <strong></strong>
-            <span></span>
-          </div>
-
-          <button
-            class="file-remove"
-            type="button"
-            aria-label="Remove file"
-          >
-            ×
-          </button>
-        `;
-
-
-        row
-          .querySelector("strong")
-          .textContent =
-            item.file.name;
-
-
-        row
-          .querySelector(".assignment-row__info span")
-          .textContent =
-            `${formatBytes(item.file.size)} · ${
-              isPdf(item.file)
-                ? "pages kept"
-                : "image becomes PDF page"
-            }`;
-
-
-        row
-          .querySelector(".file-remove")
-          .addEventListener(
-            "click",
-            () => {
-
-              state.assignmentFiles =
-                state.assignmentFiles.filter(
-                  (candidate) =>
-                    candidate.id !==
-                    item.id
-                );
-
-
-              renderAssignmentFiles();
-
-            }
-          );
-
-
-        elements.assignmentList.appendChild(
-          row
-        );
-
-      }
-    );
-
-
-    elements.assignmentActions.hidden =
-      state.assignmentFiles.length ===
-      0;
-  }
-
-
-  async function buildAssignmentPdf() {
-    if (
-      !state.assignmentFiles.length
-    ) {
-      showToast(
-        "Add assignment files first."
-      );
-
-      return;
-    }
-
-
-    showProcessing(
-      "Building assignment.",
-      "Combining PDFs and images into one file."
-    );
-
-
-    try {
-      const output =
-        await PDFLib.PDFDocument.create();
-
-
-      for (
-        let index = 0;
-        index <
-        state.assignmentFiles.length;
-        index += 1
-      ) {
-        const item =
-          state.assignmentFiles[index];
-
-
-        elements.processingDetail.textContent =
-          `Processing item ${index + 1} of ${state.assignmentFiles.length}.`;
-
-
-        if (
-          isPdf(
-            item.file
-          )
-        ) {
-          const source =
-            await PDFLib.PDFDocument.load(
-              await item.file.arrayBuffer()
-            );
-
-
-          const copiedPages =
-            await output.copyPages(
-              source,
-              source.getPageIndices()
-            );
-
-
-          copiedPages.forEach(
-            (page) => {
-
-              output.addPage(
-                page
-              );
-
-            }
-          );
-        }
-        else {
-          const normalized =
-            await normalizeImageForPdf(
-              output,
-              item.file,
-              false
-            );
-
-
-          const landscape =
-            normalized.width >
-            normalized.height;
-
-
-          const pageWidth =
-            landscape
-              ? 842
-              : 595;
-
-
-          const pageHeight =
-            landscape
-              ? 595
-              : 842;
-
-
-          const margin =
-            28;
-
-
-          const scale =
-            Math.min(
-              (
-                pageWidth -
-                margin *
-                2
-              )
-              /
-              normalized.width,
-
-              (
-                pageHeight -
-                margin *
-                2
-              )
-              /
-              normalized.height
-            );
-
-
-          const drawWidth =
-            normalized.width *
-            scale;
-
-
-          const drawHeight =
-            normalized.height *
-            scale;
-
-
-          const page =
-            output.addPage([
-              pageWidth,
-              pageHeight
-            ]);
-
-
-          page.drawImage(
-            normalized.embedded,
-            {
-              x:
-                (
-                  pageWidth -
-                  drawWidth
-                )
-                /
-                2,
-
-              y:
-                (
-                  pageHeight -
-                  drawHeight
-                )
-                /
-                2,
-
-              width:
-                drawWidth,
-
-              height:
-                drawHeight
-            }
-          );
-        }
-      }
-
-
-      const bytes =
-        await output.save();
-
-
-      const outputName =
-        cleanBaseName(
-          elements.assignmentName.value
-          ||
-          "assignment-final"
-        );
-
-
-      downloadBytes(
-        bytes,
-        `${outputName}.pdf`,
-        "application/pdf"
-      );
-
-
-      showToast(
-        "Assignment PDF ready."
-      );
-    }
-    catch (error) {
-      console.error(
-        error
-      );
-
-
-      showToast(
-        "Could not build the assignment PDF."
-      );
-    }
-    finally {
-      hideProcessing();
-    }
-  }
-
-
-  /* ==========================================================
      16. SORTABLE LISTS
      ========================================================== */
 
@@ -3059,21 +2622,6 @@
         "";
     }
 
-
-    if (
-      state.activeTool ===
-      "assignment"
-    ) {
-      state.assignmentFiles =
-        [];
-
-
-      elements.assignmentInput.value =
-        "";
-
-
-      renderAssignmentFiles();
-    }
 
 
     showToast(
@@ -3447,48 +2995,6 @@
   }
 
 
-  function bindAssignmentTool() {
-    elements.assignmentChooseButton.addEventListener(
-      "click",
-      () => {
-
-        elements.assignmentInput.click();
-
-      }
-    );
-
-
-    elements.assignmentInput.addEventListener(
-      "change",
-      () => {
-
-        addAssignmentFiles(
-          [
-            ...elements.assignmentInput.files
-          ]
-        );
-
-
-        elements.assignmentInput.value =
-          "";
-
-      }
-    );
-
-
-    attachDropZone(
-      elements.assignmentDrop,
-      addAssignmentFiles
-    );
-
-
-    elements.assignmentBuildButton.addEventListener(
-      "click",
-      buildAssignmentPdf
-    );
-  }
-
-
   /* ==========================================================
      19. LENIS / INTRO ANIMATION
      ========================================================== */
@@ -3684,12 +3190,6 @@
       renderScanFiles
     );
 
-
-    initializeSortable(
-      elements.assignmentList,
-      "assignmentFiles",
-      renderAssignmentFiles
-    );
   }
 
 
@@ -3710,8 +3210,6 @@
 
     bindOcrTool();
 
-    bindAssignmentTool();
-
     initializeSortableLists();
 
     initializeLenis();
@@ -3725,8 +3223,6 @@
     renderImageFiles();
 
     renderScanFiles();
-
-    renderAssignmentFiles();
   }
 
 
@@ -3747,4 +3243,337 @@
     initialize();
   }
 
+})();
+
+
+/* ============================================================
+   MAZEDOCS V2 — UNIVERSAL CONVERTER
+   Kept separate from the V1 tool controller so V1 remains stable.
+   ============================================================ */
+
+(() => {
+  "use strict";
+
+  const $ = (selector) => document.querySelector(selector);
+
+  const converterInput = $("#converter-input");
+  const converterDrop = $("#converter-drop");
+  const chooseButton = $("#converter-choose-button");
+  const clearButton = $("#converter-clear-button");
+  const fileCard = $("#converter-file");
+  const fileExt = $("#converter-file-ext");
+  const fileName = $("#converter-file-name");
+  const fileMeta = $("#converter-file-meta");
+  const targets = $("#converter-targets");
+  const targetGrid = $("#converter-target-grid");
+  const routeNote = $("#converter-route-note");
+  const action = $("#converter-action");
+  const selectedRoute = $("#converter-selected-route");
+  const selectedDescription = $("#converter-selected-description");
+  const runButton = $("#converter-run-button");
+  const engineStatus = $("#converter-engine-status");
+  const resetButton = $("#reset-tool-button");
+  const toastElement = $("#toast");
+
+  if (!converterInput) {
+    return;
+  }
+
+  const API_BASE =
+    String(window.MAZEDOCS_API_BASE || "")
+      .replace(/\/$/, "");
+
+  const state = {
+    file: null,
+    source: "",
+    target: "",
+    routes: [],
+    apiOnline: false,
+    libreoffice: false
+  };
+
+  const targetDetails = {
+    docx: "Editable Microsoft Word document",
+    pptx: "Microsoft PowerPoint presentation",
+    pdf: "Portable PDF document",
+    txt: "Plain editable text",
+    html: "Web-ready HTML document",
+    csv: "Comma-separated spreadsheet data",
+    json: "Structured JSON data",
+    xlsx: "Microsoft Excel workbook",
+    png: "PNG image pages",
+    jpg: "JPEG image pages",
+    webp: "WEBP image"
+  };
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+  }
+
+  function extensionOf(file) {
+    const parts = file.name.toLowerCase().split(".");
+    return parts.length > 1 ? parts.pop() : "";
+  }
+
+  function toast(message) {
+    if (!toastElement) return;
+
+    toastElement.textContent = message;
+    toastElement.classList.add("is-visible");
+
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => {
+      toastElement.classList.remove("is-visible");
+    }, 2800);
+  }
+
+  function setEngineStatus(online, libreoffice, message = "") {
+    state.apiOnline = online;
+    state.libreoffice = libreoffice;
+
+    engineStatus.classList.toggle("is-online", online);
+    engineStatus.classList.toggle("is-full", Boolean(libreoffice));
+
+    const strong = engineStatus.querySelector("strong");
+    const small = engineStatus.querySelector("small");
+
+    if (!online) {
+      strong.textContent = "Converter API offline";
+      small.textContent = message || "Start the MazeDocs V2 Python server to use converters.";
+      return;
+    }
+
+    if (libreoffice) {
+      strong.textContent = "Full conversion engine online";
+      small.textContent = "LibreOffice detected · legacy .doc / .ppt / .xls routes enabled.";
+      return;
+    }
+
+    strong.textContent = "Portable conversion engine online";
+    small.textContent = "PDF, modern Office, data, text, and image routes are ready. Legacy Office routes need LibreOffice.";
+  }
+
+  async function checkApi() {
+    try {
+      const response = await fetch(`${API_BASE}/api`, { cache: "no-store" });
+      if (!response.ok) throw new Error("API unavailable");
+      const data = await response.json();
+      setEngineStatus(true, Boolean(data.libreoffice_available));
+    }
+    catch (error) {
+      setEngineStatus(false, false);
+    }
+  }
+
+  function clearConverter() {
+    state.file = null;
+    state.source = "";
+    state.target = "";
+    state.routes = [];
+
+    converterInput.value = "";
+    fileCard.hidden = true;
+    targets.hidden = true;
+    action.hidden = true;
+    targetGrid.innerHTML = "";
+    converterDrop.hidden = false;
+  }
+
+  async function setFile(file) {
+    if (!file) return;
+
+    const source = extensionOf(file);
+    if (!source) {
+      toast("This file has no recognizable extension.");
+      return;
+    }
+
+    state.file = file;
+    state.source = source;
+    state.target = "";
+
+    converterDrop.hidden = true;
+    fileCard.hidden = false;
+    targets.hidden = false;
+    action.hidden = true;
+
+    fileExt.textContent = source.toUpperCase();
+    fileName.textContent = file.name;
+    fileMeta.textContent = formatBytes(file.size);
+    targetGrid.innerHTML = '<div class="converter-loading">Finding valid conversion routes…</div>';
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/routes?ext=${encodeURIComponent(source)}`,
+        { cache: "no-store" }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Unsupported file type");
+      }
+
+      state.routes = data.outputs || [];
+      routeNote.textContent = data.note || "";
+      renderTargets();
+    }
+    catch (error) {
+      state.routes = [];
+      targetGrid.innerHTML = `<div class="converter-error">${String(error.message || error)}</div>`;
+      routeNote.textContent = "Converter API required.";
+    }
+  }
+
+  function renderTargets() {
+    targetGrid.innerHTML = "";
+
+    if (!state.routes.length) {
+      targetGrid.innerHTML = '<div class="converter-error">No conversion routes are available for this format.</div>';
+      return;
+    }
+
+    state.routes.forEach((route) => {
+      const target = typeof route === "string" ? route : route.target;
+      const requiresLibreOffice = Boolean(route.requires_libreoffice);
+      const available = route.available !== false;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "converter-target";
+      button.dataset.target = target;
+
+      if (!available) {
+        button.classList.add("is-unavailable");
+      }
+
+      button.innerHTML = `
+        <span>${target.toUpperCase()}</span>
+        <small>${targetDetails[target] || "Converted file"}</small>
+        ${requiresLibreOffice ? '<b>FULL ENGINE</b>' : '<b>READY</b>'}
+      `;
+
+      button.addEventListener("click", () => {
+        if (!available) {
+          toast("This route needs the full LibreOffice engine.");
+          return;
+        }
+
+        state.target = target;
+
+        [...targetGrid.querySelectorAll(".converter-target")].forEach((item) => {
+          item.classList.toggle("is-selected", item === button);
+        });
+
+        selectedRoute.textContent = `${state.source.toUpperCase()} → ${target.toUpperCase()}`;
+        selectedDescription.textContent = route.description || targetDetails[target] || "Converted file";
+        action.hidden = false;
+      });
+
+      targetGrid.appendChild(button);
+    });
+  }
+
+  async function convertFile() {
+    if (!state.file || !state.target) {
+      toast("Choose an output format first.");
+      return;
+    }
+
+    const originalText = runButton.innerHTML;
+    runButton.disabled = true;
+    runButton.textContent = "Converting…";
+    action.classList.add("is-processing");
+
+    try {
+      const form = new FormData();
+      form.append("file", state.file);
+      form.append("target", state.target);
+
+      const response = await fetch(`${API_BASE}/api/convert`, {
+        method: "POST",
+        body: form
+      });
+
+      if (!response.ok) {
+        let message = `Conversion failed (${response.status}).`;
+        try {
+          const error = await response.json();
+          message = error.detail || message;
+        }
+        catch {}
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") || "";
+      const encodedMatch = disposition.match(/filename\\*=UTF-8''([^;]+)/i);
+      const plainMatch = disposition.match(/filename="?([^";]+)"?/i);
+
+      let downloadName = `mazedocs-converted.${state.target}`;
+      if (encodedMatch) downloadName = decodeURIComponent(encodedMatch[1]);
+      else if (plainMatch) downloadName = plainMatch[1];
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = downloadName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 700);
+
+      toast("Conversion complete.");
+    }
+    catch (error) {
+      console.error(error);
+      toast(error.message || "Conversion failed.");
+    }
+    finally {
+      runButton.disabled = false;
+      runButton.innerHTML = originalText;
+      action.classList.remove("is-processing");
+    }
+  }
+
+  function attachDropZone() {
+    ["dragenter", "dragover"].forEach((name) => {
+      converterDrop.addEventListener(name, (event) => {
+        event.preventDefault();
+        converterDrop.classList.add("is-dragging");
+      });
+    });
+
+    ["dragleave", "drop"].forEach((name) => {
+      converterDrop.addEventListener(name, (event) => {
+        event.preventDefault();
+        converterDrop.classList.remove("is-dragging");
+
+        if (name === "drop") {
+          setFile(event.dataTransfer.files[0]);
+        }
+      });
+    });
+  }
+
+  chooseButton.addEventListener("click", () => converterInput.click());
+
+  converterInput.addEventListener("change", () => {
+    setFile(converterInput.files[0]);
+  });
+
+  clearButton.addEventListener("click", clearConverter);
+  runButton.addEventListener("click", convertFile);
+
+  resetButton?.addEventListener("click", () => {
+    const panel = document.querySelector('[data-tool-panel="convert"]');
+    if (panel && !panel.hidden) {
+      clearConverter();
+    }
+  });
+
+  attachDropZone();
+  checkApi();
 })();

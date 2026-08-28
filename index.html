@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f5f1e8" />
   <meta name="description" content="MazeDocs is a free student document toolkit for merging, organizing, compressing, scanning, OCR, and assignment building." />
-  <title>MazeDocs — Student Utility OS</title>
+  <title>MazeDocs V2 — Student Utility OS</title>
 
   <link rel="icon" href="assets/mazedocs-mark.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -50,7 +50,7 @@
   <main>
     <section class="hero" id="home">
       <div class="hero__rail">
-        <span>MAZEDOCS CAMPUS OS / V1</span>
+        <span>MAZEDOCS CAMPUS OS / V2</span>
         <span>UTILITY MODE · LOCAL FIRST</span>
       </div>
 
@@ -141,11 +141,11 @@
           <span>06</span><strong>Extract Text</strong><p>OCR screenshots, notes, and scanned PDFs.</p><i>↗</i>
         </button>
 
-        <button class="tool-card tool-card--wide" type="button" data-tool="assignment">
-          <span>07</span>
+        <button class="tool-card tool-card--wide converter-card" type="button" data-tool="convert">
+          <span>08</span>
           <div>
-            <strong>Assignment Builder</strong>
-            <p>Mix PDFs and images, reorder everything, then export one submission-ready PDF.</p>
+            <strong>Universal Converter</strong>
+            <p>PDF, Word, PowerPoint, spreadsheets, text, and images — convert common student file formats from one desk.</p>
           </div>
           <i>↗</i>
         </button>
@@ -325,30 +325,92 @@
         </div>
       </section>
 
-      <section class="tool-panel" data-tool-panel="assignment" hidden>
+      <section class="tool-panel converter-panel" data-tool-panel="convert" hidden>
         <div class="tool-panel__intro">
-          <div><span class="mono-label">ASSIGNMENT / BUILD</span><h3>One clean submission.</h3></div>
-          <p>Mix PDFs with screenshots and photos. Reorder them, then export everything into one assignment-ready PDF.</p>
+          <div>
+            <span class="mono-label">V2 / UNIVERSAL CONVERTER</span>
+            <h3>Change the format.</h3>
+          </div>
+
+          <p>
+            Drop one common student file and MazeDocs will show only the output formats that make sense for it.
+            PDF → Word and PDF → PowerPoint work without LibreOffice; legacy Office files use the full conversion engine when available.
+          </p>
         </div>
 
-        <input id="assignment-input" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple hidden />
-
-        <div class="drop-area" id="assignment-drop">
-          <div class="drop-area__icon">+</div>
-          <strong>Drop assignment files here</strong>
-          <span>PDF · JPG · PNG · WEBP</span>
-          <button class="button button--primary" id="assignment-choose-button" type="button">Choose files</button>
+        <div class="converter-status" id="converter-engine-status">
+          <span class="converter-status__lamp"></span>
+          <div>
+            <strong>Checking converter engine…</strong>
+            <small>Connecting to the MazeDocs V2 API.</small>
+          </div>
         </div>
 
-        <div class="assignment-list" id="assignment-list"></div>
+        <input
+          id="converter-input"
+          type="file"
+          accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.json,.txt,.md,.html,.htm,.jpg,.jpeg,.png,.webp,.heic"
+          hidden
+        />
 
-        <div class="assignment-export" id="assignment-actions" hidden>
-          <label>
-            <span class="mono-label">OUTPUT FILE NAME</span>
-            <input id="assignment-name" type="text" value="assignment-final" maxlength="70" />
-          </label>
+        <div class="drop-area converter-drop" id="converter-drop">
+          <div class="converter-drop__badge">V2</div>
+          <div class="drop-area__icon">⇄</div>
+          <strong>Drop a file to convert</strong>
+          <span>PDF · DOC / DOCX · PPT / PPTX · XLS / XLSX · CSV · JSON · TXT · images</span>
+          <button class="button button--primary" id="converter-choose-button" type="button">Choose a file</button>
+        </div>
 
-          <button class="button button--primary" id="assignment-build-button" type="button">Build assignment PDF</button>
+        <div class="converter-file" id="converter-file" hidden>
+          <div class="converter-file__icon" id="converter-file-ext">PDF</div>
+          <div class="converter-file__info">
+            <span class="mono-label">SOURCE FILE</span>
+            <strong id="converter-file-name">document.pdf</strong>
+            <small id="converter-file-meta">0 MB</small>
+          </div>
+          <button class="file-remove" id="converter-clear-button" type="button" aria-label="Remove file">×</button>
+        </div>
+
+        <div class="converter-targets" id="converter-targets" hidden>
+          <div class="converter-targets__heading">
+            <div>
+              <span class="mono-label">CONVERT TO</span>
+              <strong>Choose an output format.</strong>
+            </div>
+            <small id="converter-route-note"></small>
+          </div>
+          <div class="converter-target-grid" id="converter-target-grid"></div>
+        </div>
+
+        <div class="converter-action" id="converter-action" hidden>
+          <div>
+            <span class="mono-label">SELECTED ROUTE</span>
+            <strong id="converter-selected-route">PDF → DOCX</strong>
+            <small id="converter-selected-description">Editable Word document.</small>
+          </div>
+
+          <button class="button button--primary" id="converter-run-button" type="button">
+            Convert file
+            <span>↗</span>
+          </button>
+        </div>
+
+        <div class="converter-help">
+          <article>
+            <span>01</span>
+            <strong>PDF → Word</strong>
+            <p>Extracts editable text and available images into a DOCX. Complex page layouts may shift.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <strong>PDF → PowerPoint</strong>
+            <p>Places each PDF page onto its own slide for strong visual fidelity.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <strong>Legacy Office</strong>
+            <p>.doc, .ppt, and .xls use LibreOffice when the full engine is available.</p>
+          </article>
         </div>
       </section>
 
@@ -396,7 +458,7 @@
     </div>
 
     <div>
-      <span>V1</span><span>LOCAL-FIRST</span><span>STUDENT UTILITY OS</span><span>READY</span>
+      <span>V2</span><span>LOCAL-FIRST</span><span>STUDENT UTILITY OS</span><span>READY</span>
     </div>
 
     <a href="#home">Back to top ↑</a>
