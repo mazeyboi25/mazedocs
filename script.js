@@ -4245,7 +4245,7 @@
 
 
     targetLabel.textContent =
-      "Choose an output above.";
+      "Choose an output on the right!";
 
 
     targetDescription.textContent =
@@ -4463,7 +4463,7 @@
 
     if (!route) {
       targetLabel.textContent =
-        "Choose an output above.";
+        "Choose an output on the right!";
 
 
       targetDescription.textContent =
