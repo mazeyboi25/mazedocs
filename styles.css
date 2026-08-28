@@ -2119,3 +2119,555 @@ canvas {
     width: 100%;
   }
 }
+
+/* ============================================================
+   MAZEDOCS V2 — READABILITY OVERRIDE
+   Paste this at the VERY BOTTOM of styles.css
+   ============================================================ */
+
+
+/* ------------------------------------------------------------
+   GLOBAL SMALL LABELS
+   ------------------------------------------------------------ */
+
+.eyebrow,
+.mono-label {
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+}
+
+
+/* ------------------------------------------------------------
+   TOPBAR
+   ------------------------------------------------------------ */
+
+.brand small {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+
+.privacy-chip {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+
+.topbar__tools {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+
+/* ------------------------------------------------------------
+   MOVING TICKER
+   ------------------------------------------------------------ */
+
+.utility-ticker__track {
+  font-size: 10px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+
+/* ------------------------------------------------------------
+   HERO
+   ------------------------------------------------------------ */
+
+.hero__rail {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+.hero__lede {
+  max-width: 700px;
+
+  font-size: clamp(
+    15px,
+    1.15vw,
+    18px
+  );
+
+  line-height: 1.7;
+}
+
+
+.hero__actions > span {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+.hero__footer span {
+  font-size: 10px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+
+/* ------------------------------------------------------------
+   TOOL SECTION
+   ------------------------------------------------------------ */
+
+.section-heading > p {
+  max-width: 650px;
+
+  font-size: 14px;
+  line-height: 1.7;
+
+  color: #4c4f5d;
+}
+
+
+.tool-card > span {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+
+.tool-card p {
+  max-width: 380px;
+
+  margin-top: 12px;
+
+  font-size: 13px;
+  line-height: 1.6;
+  font-weight: 500;
+
+  opacity: 0.85;
+}
+
+
+.tool-card.is-active p {
+  opacity: 1;
+
+  color: rgba(
+    255,
+    255,
+    255,
+    0.92
+  );
+}
+
+
+/* ------------------------------------------------------------
+   WORKSPACE TOP BAR
+   ------------------------------------------------------------ */
+
+.workspace__topbar strong {
+  font-size: 14px;
+}
+
+
+.workspace__topbar .mono-label {
+  font-size: 10px;
+}
+
+
+/* ------------------------------------------------------------
+   TOOL INTRO TEXT
+   ------------------------------------------------------------ */
+
+.tool-panel__intro > p {
+  font-size: 14px;
+  line-height: 1.7;
+
+  color: #4d5060;
+}
+
+
+/* ------------------------------------------------------------
+   DROP AREAS
+   ------------------------------------------------------------ */
+
+.drop-area > span {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+.drop-area--compact > div span {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+.drop-area--compact > div strong {
+  font-size: 17px;
+}
+
+
+/* ------------------------------------------------------------
+   FILE LISTS
+   ------------------------------------------------------------ */
+
+.file-row__number {
+  font-size: 10px;
+}
+
+
+.file-row__info strong {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+
+.file-row__info span {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+/* ------------------------------------------------------------
+   ACTION BARS
+   ------------------------------------------------------------ */
+
+.action-bar span {
+  font-size: 13px;
+}
+
+
+.action-bar small {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+/* ------------------------------------------------------------
+   PDF PAGE / IMAGE CARDS
+   ------------------------------------------------------------ */
+
+.page-card__meta span,
+.image-card__footer span {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+
+.page-action,
+.file-remove {
+  font-size: 12px;
+}
+
+
+/* ------------------------------------------------------------
+   COMPRESSION
+   ------------------------------------------------------------ */
+
+.quality-scale {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+
+.settings-card__row .mono-label {
+  font-size: 10px;
+}
+
+
+/* ------------------------------------------------------------
+   SCAN
+   ------------------------------------------------------------ */
+
+.scan-launch p {
+  max-width: 600px;
+
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+
+.toggle-row {
+  font-size: 12px;
+}
+
+
+/* ------------------------------------------------------------
+   OCR
+   ------------------------------------------------------------ */
+
+.ocr-progress > div:first-child {
+  font-size: 12px;
+}
+
+
+.ocr-progress strong {
+  font-size: 11px;
+}
+
+
+#ocr-output {
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+
+/* ============================================================
+   UNIVERSAL CONVERTER
+   ============================================================ */
+
+
+/* Engine status bar */
+
+.converter-status strong {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+
+.converter-status small {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+/* Uploaded source file */
+
+.converter-file__info strong,
+.converter-file strong {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+
+.converter-file__info span,
+.converter-file small {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+.converter-file__icon {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+
+/* Convert-to heading */
+
+.converter-targets__heading strong {
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+
+.converter-targets__heading > small {
+  max-width: 520px;
+
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+
+/* Dropdown */
+
+.converter-format-picker select {
+  min-height: 54px;
+
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+
+/* Output description panel */
+
+.converter-format-detail strong {
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+
+.converter-format-detail p {
+  font-size: 12px;
+  line-height: 1.65;
+
+  color: #4e5160;
+}
+
+
+/* Selected conversion route */
+
+.converter-action strong {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+
+.converter-action p,
+.converter-action span,
+.converter-action small {
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+
+/* ------------------------------------------------------------
+   PRIVACY SECTION
+   ------------------------------------------------------------ */
+
+.privacy-section__notes article > span {
+  font-size: 10px;
+}
+
+
+.privacy-section__notes strong {
+  font-size: 15px;
+}
+
+
+.privacy-section__notes p {
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+
+/* ------------------------------------------------------------
+   FOOTER
+   ------------------------------------------------------------ */
+
+.footer strong {
+  font-size: 14px;
+}
+
+
+.footer span,
+.footer a {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   MOBILE READABILITY
+   ============================================================ */
+
+@media (max-width: 700px) {
+
+  .eyebrow,
+  .mono-label {
+    font-size: 9px;
+  }
+
+
+  .hero__rail {
+    font-size: 8px;
+  }
+
+
+  .hero__lede {
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+
+  .hero__actions > span {
+    font-size: 9px;
+  }
+
+
+  .hero__footer span {
+    font-size: 9px;
+  }
+
+
+  .section-heading > p {
+    font-size: 13px;
+  }
+
+
+  .tool-card > span {
+    font-size: 9px;
+  }
+
+
+  .tool-card p {
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+
+  .tool-panel__intro > p {
+    font-size: 12px;
+    line-height: 1.65;
+  }
+
+
+  .drop-area > span {
+    font-size: 11px;
+  }
+
+
+  .file-row__info strong {
+    font-size: 12px;
+  }
+
+
+  .file-row__info span {
+    font-size: 9px;
+  }
+
+
+  .scan-launch p {
+    font-size: 12px;
+  }
+
+
+  #ocr-output {
+    font-size: 12px;
+  }
+
+
+  /* Universal Converter mobile */
+
+  .converter-status strong {
+    font-size: 12px;
+  }
+
+
+  .converter-status small {
+    font-size: 9px;
+    line-height: 1.5;
+  }
+
+
+  .converter-targets__heading strong {
+    font-size: 16px;
+  }
+
+
+  .converter-targets__heading > small {
+    font-size: 10px;
+  }
+
+
+  .converter-format-picker select {
+    font-size: 13px;
+  }
+
+
+  .converter-format-detail strong {
+    font-size: 16px;
+  }
+
+
+  .converter-format-detail p {
+    font-size: 11px;
+  }
+
+
+  .converter-action p,
+  .converter-action span,
+  .converter-action small {
+    font-size: 10px;
+  }
+
+
+  .privacy-section__notes p {
+    font-size: 11px;
+  }
+
+}
