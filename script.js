@@ -41,9 +41,9 @@
    *
    * IMPORTANT:
    * This does NOT increase Vercel Function's request-body limit.
-   * Universal Converter files larger than DIRECT_API_LIMIT_BYTES
-   * are sent through the large-file direct-upload flow defined
-   * in the V2 converter controller at the bottom of this file.
+   * Universal Converter files are sent directly from the browser
+   * to the Railway converter backend, so they do not pass through
+   * a Vercel Function request body.
    */
   const MAX_APP_FILE_BYTES =
     200 * 1024 * 1024;
@@ -3268,26 +3268,14 @@
    MAZEDOCS V2 — UNIVERSAL CONVERTER
    200 MB FRONTEND FLOW
 
-   SMALL FILES:
-     Browser -> POST /api -> converted result
-
-   LARGE FILES:
-     Browser -> direct object-storage upload
-             -> POST /api/large-convert with file URL
-             -> converted result is stored outside the Function
-             -> browser downloads from returned URL
+   UNIVERSAL CONVERTER:
+     Browser -> Railway POST /api -> converted result
 
    WHY:
-   Vercel Functions cannot receive a 200 MB multipart request.
-   This file therefore NEVER sends large binaries to /api.
-
-   REQUIRED SERVER ENDPOINTS FOR LARGE FILES:
-     POST /api/large-upload/init
-     POST /api/large-convert
-
-   The large-upload endpoint should return a signed/direct upload URL.
-   The large-convert endpoint should return a download URL for the
-   converted file. Vercel Blob can be used behind those endpoints.
+   The Universal Converter no longer sends its file through a
+   Vercel Function. The browser uploads directly to the dedicated
+   Railway Python converter, which can accept MazeDocs files up to
+   the application's 200 MB ceiling.
    ============================================================ */
 
 (() => {
@@ -3384,60 +3372,32 @@
      ========================================================== */
 
   /*
-   * User-facing maximum.
+   * MazeDocs application ceiling.
    *
-   * 200 MiB = 209,715,200 bytes.
+   * The browser sends Universal Converter uploads directly to
+   * the Railway backend instead of through a Vercel Function.
    */
   const MAX_CONVERTER_FILE_BYTES =
     200 * 1024 * 1024;
 
 
   /*
-   * Stay safely below Vercel Function's request-body ceiling.
+   * Dedicated MazeDocs conversion backend.
    *
-   * Files at or below this value may use your normal POST /api.
-   * Larger files MUST bypass the Function body with direct upload.
-   */
-  const DIRECT_API_LIMIT_BYTES =
-    4 * 1024 * 1024;
-
-
-  /*
-   * Optional external API base.
+   * You can still override this before script.js loads with:
    *
-   * Leave window.MAZEDOCS_API_BASE undefined when frontend and
-   * backend live on the same domain.
+   * window.MAZEDOCS_API_BASE =
+   *   "https://another-backend.example.com";
    */
   const API_BASE =
     String(
       window.MAZEDOCS_API_BASE
       ||
-      ""
+      "https://mazedocs-converter-production.up.railway.app"
     ).replace(
       /\/$/,
       ""
     );
-
-
-  /*
-   * These two endpoints are required for files larger than 4 MB.
-   *
-   * /api/large-upload/init:
-   *   receives only metadata
-   *   returns a signed/direct storage upload URL
-   *
-   * /api/large-convert:
-   *   receives only source URL + target format
-   *   downloads/converts server-side
-   *   stores the result
-   *   returns a download URL
-   */
-  const LARGE_UPLOAD_INIT_ENDPOINT =
-    `${API_BASE}/api/large-upload/init`;
-
-
-  const LARGE_CONVERT_ENDPOINT =
-    `${API_BASE}/api/large-convert`;
 
 
   /* ==========================================================
@@ -4325,7 +4285,7 @@
 
 
       small.textContent =
-        "LibreOffice detected · files up to 200 MB can use the large-file route.";
+        "LibreOffice detected · Universal Converter supports files up to 200 MB.";
     }
     else {
       strong.textContent =
@@ -4333,7 +4293,7 @@
 
 
       small.textContent =
-        "Modern formats are ready · legacy .doc, .ppt, and .xls need LibreOffice.";
+        "Railway converter online · modern formats ready · legacy .doc, .ppt, and .xls need LibreOffice.";
     }
   }
 
@@ -4526,21 +4486,21 @@
 
 
     if (
-      state.file.size >
-      DIRECT_API_LIMIT_BYTES
+      state.file.size >=
+      50 * 1024 * 1024
     ) {
       routeNote.textContent =
-        `Large-file mode · ${formatFileSize(state.file.size)} will upload directly to storage before conversion.`;
+        `Large file · ${formatFileSize(state.file.size)} will upload directly to the MazeDocs converter. Keep this tab open while it uploads.`;
     }
     else if (
       state.libreOffice
     ) {
       routeNote.textContent =
-        "Full engine online · direct conversion ready.";
+        "Full Railway conversion engine online · files up to 200 MB supported.";
     }
     else {
       routeNote.textContent =
-        "Portable engine online · legacy .doc, .ppt, and .xls need LibreOffice.";
+        "Railway converter online · legacy .doc, .ppt, and .xls need LibreOffice.";
     }
   }
 
@@ -4613,11 +4573,7 @@
 
 
     fileMeta.textContent =
-      `${formatFileSize(file.size)} · ${
-        file.size > DIRECT_API_LIMIT_BYTES
-          ? "large-file mode"
-          : "direct mode"
-      }`;
+      `${formatFileSize(file.size)} · Railway converter`;
 
 
     populateTargets();
@@ -4712,11 +4668,11 @@
     else if (
       state.file
       &&
-      state.file.size >
-      DIRECT_API_LIMIT_BYTES
+      state.file.size >=
+      50 * 1024 * 1024
     ) {
       selectedDescription.textContent =
-        `${route.description} Large-file mode will be used automatically.`;
+        `${route.description} This ${formatFileSize(state.file.size)} file will upload directly to the MazeDocs Railway converter.`;
     }
 
 
@@ -4922,231 +4878,163 @@
 
 
   /* ==========================================================
-     09. SMALL-FILE CONVERSION
+     09. RAILWAY CONVERSION
      ========================================================== */
 
-  async function convertSmallFile() {
-    const form =
-      new FormData();
+  function filenameFromXHR(
+    request,
+    fallback
+  ) {
+    const disposition =
+      request.getResponseHeader(
+        "content-disposition"
+      )
+      ||
+      "";
 
 
-    form.append(
-      "file",
-      state.file
-    );
-
-
-    form.append(
-      "target",
-      state.target
-    );
-
-
-    const response =
-      await fetch(
-        `${API_BASE}/api`,
-        {
-          method:
-            "POST",
-
-          body:
-            form
-        }
+    const encodedMatch =
+      disposition.match(
+        /filename\*=UTF-8''([^;]+)/i
       );
 
 
-    if (!response.ok) {
-      throw new Error(
-        await readErrorResponse(
-          response
-        )
+    const plainMatch =
+      disposition.match(
+        /filename="?([^";]+)"?/i
+      );
+
+
+    if (encodedMatch) {
+      return sanitizeDownloadName(
+        decodeURIComponent(
+          encodedMatch[1]
+        ),
+        fallback
       );
     }
 
 
-    const blob =
-      await response.blob();
-
-
-    const fallback =
-      `mazedocs-converted.${state.target}`;
-
-
-    const downloadName =
-      filenameFromDisposition(
-        response,
+    if (plainMatch) {
+      return sanitizeDownloadName(
+        plainMatch[1],
         fallback
       );
+    }
 
 
-    downloadBlob(
-      blob,
-      downloadName
-    );
+    return fallback;
   }
 
 
-  /* ==========================================================
-     10. LARGE-FILE UPLOAD
-     ========================================================== */
-
-  async function initializeLargeUpload(
-    file
+  async function errorMessageFromBlob(
+    blob,
+    status
   ) {
-    const response =
-      await fetch(
-        LARGE_UPLOAD_INIT_ENDPOINT,
-        {
-          method:
-            "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body:
-            JSON.stringify({
-              filename:
-                file.name,
-
-              size:
-                file.size,
-
-              contentType:
-                file.type
-                ||
-                "application/octet-stream"
-            })
-        }
-      );
+    try {
+      const text =
+        await blob.text();
 
 
-    if (!response.ok) {
-      const message =
-        await readErrorResponse(
-          response
+      if (!text.trim()) {
+        return `Conversion failed (${status}).`;
+      }
+
+
+      try {
+        const data =
+          JSON.parse(
+            text
+          );
+
+
+        return (
+          data.detail
+          ||
+          data.message
+          ||
+          data.error
+          ||
+          `Conversion failed (${status}).`
+        );
+      }
+      catch {
+        return text
+          .replace(
+            /<[^>]+>/g,
+            " "
+          )
+          .replace(
+            /\s+/g,
+            " "
+          )
+          .trim()
+          .slice(
+            0,
+            240
+          )
+          ||
+          `Conversion failed (${status}).`;
+      }
+    }
+    catch {
+      return `Conversion failed (${status}).`;
+    }
+  }
+
+
+  function convertThroughRailway() {
+    return new Promise(
+      (resolve, reject) => {
+        const form =
+          new FormData();
+
+
+        form.append(
+          "file",
+          state.file
         );
 
 
-      throw new Error(
-        `${message} Large-file upload is not configured on the backend.`
-      );
-    }
+        form.append(
+          "target",
+          state.target
+        );
 
 
-    const data =
-      await response.json();
-
-
-    if (
-      !data.uploadUrl
-      ||
-      !(
-        data.fileUrl
-        ||
-        data.sourceUrl
-      )
-    ) {
-      throw new Error(
-        "Large-file upload endpoint returned an incomplete upload session."
-      );
-    }
-
-
-    return {
-      uploadUrl:
-        data.uploadUrl,
-
-      sourceUrl:
-        data.fileUrl
-        ||
-        data.sourceUrl,
-
-      method:
-        data.method
-        ||
-        "PUT",
-
-      headers:
-        data.headers
-        ||
-        {},
-
-      uploadId:
-        data.uploadId
-        ||
-        null
-    };
-  }
-
-
-  function uploadFileDirectly(
-    file,
-    session,
-    onProgress
-  ) {
-    return new Promise(
-      (resolve, reject) => {
         const request =
           new XMLHttpRequest();
 
 
         request.open(
-          session.method,
-          session.uploadUrl,
+          "POST",
+          `${API_BASE}/api`,
           true
         );
 
 
-        Object.entries(
-          session.headers
-          ||
-          {}
-        ).forEach(
-          ([name, value]) => {
-            request.setRequestHeader(
-              name,
-              String(value)
+        /*
+         * Railway returns the generated document directly.
+         * XHR gives MazeDocs upload-progress events while still
+         * allowing the response to be handled as a Blob.
+         */
+        request.responseType =
+          "blob";
+
+
+        request.upload.addEventListener(
+          "loadstart",
+          () => {
+            setRunButton(
+              "Uploading 0%…"
+            );
+
+
+            setConversionMessage(
+              `Uploading ${formatFileSize(state.file.size)} to the MazeDocs converter…`
             );
           }
         );
-
-
-        /*
-         * Do NOT manually set Content-Length.
-         * Browsers control that header.
-         *
-         * Only set Content-Type when the signed upload expects it.
-         */
-        if (
-          !Object.keys(
-            session.headers
-            ||
-            {}
-          ).some(
-            (name) =>
-              name.toLowerCase()
-              ===
-              "content-type"
-          )
-          &&
-          file.type
-        ) {
-          try {
-            request.setRequestHeader(
-              "Content-Type",
-              file.type
-            );
-          }
-          catch {
-            /*
-             * Some signed URLs require the exact headers supplied
-             * by the server. In that case the browser upload can
-             * proceed without adding Content-Type here.
-             */
-          }
-        }
 
 
         request.upload.addEventListener(
@@ -5155,23 +5043,51 @@
             if (
               !event.lengthComputable
             ) {
+              setRunButton(
+                "Uploading…"
+              );
+
+
               return;
             }
 
 
             const percent =
-              Math.round(
-                (
-                  event.loaded /
-                  event.total
+              Math.min(
+                100,
+                Math.round(
+                  (
+                    event.loaded /
+                    event.total
+                  )
+                  *
+                  100
                 )
-                *
-                100
               );
 
 
-            onProgress?.(
-              percent
+            setRunButton(
+              `Uploading ${percent}%…`
+            );
+
+
+            setConversionMessage(
+              `Uploading to the MazeDocs converter · ${percent}%`
+            );
+          }
+        );
+
+
+        request.upload.addEventListener(
+          "load",
+          () => {
+            setRunButton(
+              "Converting…"
+            );
+
+
+            setConversionMessage(
+              "Upload complete. MazeDocs is converting your file…"
             );
           }
         );
@@ -5179,21 +5095,59 @@
 
         request.addEventListener(
           "load",
-          () => {
+          async () => {
+            const responseBlob =
+              request.response
+              ||
+              new Blob();
+
+
             if (
               request.status >= 200
               &&
               request.status < 300
             ) {
-              resolve();
-            }
-            else {
-              reject(
-                new Error(
-                  `Direct upload failed (${request.status}).`
-                )
+              const fallback =
+                `mazedocs-converted.${state.target}`;
+
+
+              const downloadName =
+                filenameFromXHR(
+                  request,
+                  fallback
+                );
+
+
+              setRunButton(
+                "Preparing download…"
               );
+
+
+              setConversionMessage(
+                "Conversion complete. Preparing your download…"
+              );
+
+
+              downloadBlob(
+                responseBlob,
+                downloadName
+              );
+
+
+              resolve();
+
+              return;
             }
+
+
+            reject(
+              new Error(
+                await errorMessageFromBlob(
+                  responseBlob,
+                  request.status
+                )
+              )
+            );
           }
         );
 
@@ -5203,7 +5157,7 @@
           () => {
             reject(
               new Error(
-                "Direct upload failed because of a network or storage error."
+                "Could not reach the MazeDocs converter. Check your connection and try again."
               )
             );
           }
@@ -5215,197 +5169,25 @@
           () => {
             reject(
               new Error(
-                "Direct upload was cancelled."
+                "The conversion upload was cancelled."
               )
             );
           }
         );
 
 
+        /*
+         * No artificial browser timeout.
+         * Railway's own platform/network limits remain authoritative.
+         */
+        request.timeout =
+          0;
+
+
         request.send(
-          file
+          form
         );
       }
-    );
-  }
-
-
-  /* ==========================================================
-     11. LARGE-FILE CONVERSION
-     ========================================================== */
-
-  async function requestLargeConversion(
-    sourceUrl,
-    uploadId
-  ) {
-    const response =
-      await fetch(
-        LARGE_CONVERT_ENDPOINT,
-        {
-          method:
-            "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body:
-            JSON.stringify({
-              sourceUrl,
-              sourceName:
-                state.file.name,
-
-              sourceExtension:
-                state.source,
-
-              target:
-                state.target,
-
-              uploadId:
-                uploadId
-                ||
-                null
-            })
-        }
-      );
-
-
-    if (!response.ok) {
-      throw new Error(
-        await readErrorResponse(
-          response
-        )
-      );
-    }
-
-
-    const contentType =
-      response.headers.get(
-        "content-type"
-      )
-      ||
-      "";
-
-
-    /*
-     * Large mode is expected to return JSON with a storage URL.
-     *
-     * Returning the converted 50 MB / 100 MB file through the
-     * Vercel Function would simply hit the response-size limit.
-     */
-    if (
-      !contentType.includes(
-        "application/json"
-      )
-    ) {
-      throw new Error(
-        "Large-file conversion must return a download URL instead of the converted binary."
-      );
-    }
-
-
-    const data =
-      await response.json();
-
-
-    const downloadUrl =
-      data.downloadUrl
-      ||
-      data.download_url
-      ||
-      data.url;
-
-
-    if (!downloadUrl) {
-      throw new Error(
-        "Conversion finished but the backend did not return a download URL."
-      );
-    }
-
-
-    return {
-      downloadUrl,
-
-      filename:
-        sanitizeDownloadName(
-          data.filename
-          ||
-          data.name,
-          `mazedocs-converted.${state.target}`
-        )
-    };
-  }
-
-
-  async function convertLargeFile() {
-    setRunButton(
-      "Preparing upload…"
-    );
-
-
-    setConversionMessage(
-      `Preparing ${formatFileSize(state.file.size)} for large-file conversion…`
-    );
-
-
-    const session =
-      await initializeLargeUpload(
-        state.file
-      );
-
-
-    setRunButton(
-      "Uploading 0%…"
-    );
-
-
-    await uploadFileDirectly(
-      state.file,
-      session,
-      (percent) => {
-        setRunButton(
-          `Uploading ${percent}%…`
-        );
-
-
-        setConversionMessage(
-          `Uploading directly to storage · ${percent}%`
-        );
-      }
-    );
-
-
-    setRunButton(
-      "Converting…"
-    );
-
-
-    setConversionMessage(
-      "Upload complete. MazeDocs is converting the stored file…"
-    );
-
-
-    const result =
-      await requestLargeConversion(
-        session.sourceUrl,
-        session.uploadId
-      );
-
-
-    setRunButton(
-      "Opening download…"
-    );
-
-
-    setConversionMessage(
-      "Conversion complete. Opening the generated file…"
-    );
-
-
-    downloadFromUrl(
-      result.downloadUrl,
-      result.filename
     );
   }
 
@@ -5490,25 +5272,7 @@
 
 
     try {
-      if (
-        state.file.size <=
-        DIRECT_API_LIMIT_BYTES
-      ) {
-        setRunButton(
-          "Converting…"
-        );
-
-
-        setConversionMessage(
-          "Converting directly…"
-        );
-
-
-        await convertSmallFile();
-      }
-      else {
-        await convertLargeFile();
-      }
+      await convertThroughRailway();
 
 
       toast(
@@ -5521,36 +5285,19 @@
       );
 
 
-      /*
-       * Make the common configuration mistake very obvious.
-       */
-      if (
-        state.file.size >
-        DIRECT_API_LIMIT_BYTES
-        &&
-        /large-file|upload|endpoint|404|405/i.test(
-          error.message
-          ||
-          ""
-        )
-      ) {
-        toast(
-          "Large-file backend is not configured yet."
-        );
-      }
-      else {
-        toast(
-          error.message
-          ||
-          "Conversion failed."
-        );
-      }
+      const message =
+        error.message
+        ||
+        "Conversion failed.";
+
+
+      toast(
+        message
+      );
 
 
       selectedDescription.textContent =
-        error.message
-        ||
-        originalDescription;
+        message;
     }
     finally {
       runButton.innerHTML =
@@ -5566,10 +5313,16 @@
       );
 
 
-      /*
-       * Re-apply route availability after restoring the button.
-       */
       updateSelectedTarget();
+
+
+      if (
+        selectedDescription.textContent ===
+        "Conversion failed."
+      ) {
+        selectedDescription.textContent =
+          originalDescription;
+      }
     }
   }
 
