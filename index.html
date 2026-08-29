@@ -432,47 +432,106 @@
             >×</button>
           </div>
 
-          <div class="enhancement-compare">
-            <figure class="enhancement-pane">
-              <figcaption>ORIGINAL</figcaption>
-              <div class="enhancement-image-frame">
-                <img id="enhancement-original" alt="Original page preview" />
+          <div class="enhancement-card__scroll" id="enhancement-scroll">
+            <div class="enhancement-toolbar">
+              <div>
+                <strong>SCAN TOOLS</strong>
+                <small>Crop / straighten first, then choose a cleanup style.</small>
               </div>
-            </figure>
 
-            <figure class="enhancement-pane">
-              <figcaption>
-                <span>PREVIEW</span>
-                <strong id="enhancement-preview-label">Original</strong>
-              </figcaption>
-              <div class="enhancement-image-frame enhancement-image-frame--preview">
-                <img id="enhancement-preview" alt="Enhanced page preview" />
-                <div class="enhancement-rendering" id="enhancement-rendering" hidden>
-                  <span></span>
-                  <b>Rendering preview…</b>
+              <button
+                class="enhancement-crop-open"
+                id="enhancement-crop-open"
+                type="button"
+              >
+                Crop / straighten
+                <span id="enhancement-crop-state">FULL PAGE</span>
+              </button>
+            </div>
+
+            <div class="enhancement-compare" id="enhancement-compare">
+              <figure class="enhancement-pane">
+                <figcaption>ORIGINAL</figcaption>
+                <div class="enhancement-image-frame">
+                  <img id="enhancement-original" alt="Original page preview" />
+                </div>
+              </figure>
+
+              <figure class="enhancement-pane">
+                <figcaption>
+                  <span>PREVIEW</span>
+                  <strong id="enhancement-preview-label">Original</strong>
+                </figcaption>
+                <div class="enhancement-image-frame enhancement-image-frame--preview">
+                  <img id="enhancement-preview" alt="Enhanced page preview" />
+                  <div class="enhancement-rendering" id="enhancement-rendering" hidden>
+                    <span></span>
+                    <b>Rendering preview…</b>
+                  </div>
+                </div>
+              </figure>
+            </div>
+
+            <section class="enhancement-crop-panel" id="enhancement-crop-panel" hidden>
+              <div class="enhancement-crop-panel__head">
+                <div>
+                  <span class="mono-label">FREE PERSPECTIVE CROP</span>
+                  <h4>Drag all four corners.</h4>
+                  <p>Match the handles to the page corners. MazeDocs straightens the result when you apply it.</p>
+                </div>
+
+                <div class="enhancement-crop-panel__quick">
+                  <button type="button" id="enhancement-crop-auto">Auto edges</button>
+                  <button type="button" id="enhancement-crop-reset">Reset</button>
                 </div>
               </div>
-            </figure>
-          </div>
 
-          <div class="enhancement-presets" aria-label="Image enhancement presets">
-            <button type="button" data-enhancement="original">Original<small>No processing</small></button>
-            <button type="button" data-enhancement="auto">Auto<small>Balanced cleanup</small></button>
-            <button type="button" data-enhancement="document">Document<small>Whiter paper</small></button>
-            <button type="button" data-enhancement="vivid">Vivid Color<small>Clearer colors</small></button>
-            <button type="button" data-enhancement="grayscale">Grayscale<small>Clean gray scan</small></button>
-            <button type="button" data-enhancement="bw">B&amp;W<small>Crisp text</small></button>
-            <button type="button" data-enhancement="shadow">Shadow Fix<small>Even lighting</small></button>
-            <button type="button" data-enhancement="sharpen">Sharp Text<small>Stronger edges</small></button>
-            <button type="button" data-enhancement="denoise">Denoise<small>Reduce grain</small></button>
-            <button type="button" data-enhancement="photo">Photo<small>Natural boost</small></button>
+              <div class="enhancement-crop-workspace">
+                <div class="enhancement-crop-stage" id="enhancement-crop-stage">
+                  <img id="enhancement-crop-image" alt="Image crop editor" />
+                  <svg
+                    class="enhancement-crop-overlay"
+                    id="enhancement-crop-overlay"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <polygon id="enhancement-crop-polygon" points="0,0 100,0 100,100 0,100"></polygon>
+                    <polyline id="enhancement-crop-line" points="0,0 100,0 100,100 0,100 0,0"></polyline>
+                  </svg>
+
+                  <button class="enhancement-crop-handle" data-crop-corner="0" type="button" aria-label="Top left crop corner"></button>
+                  <button class="enhancement-crop-handle" data-crop-corner="1" type="button" aria-label="Top right crop corner"></button>
+                  <button class="enhancement-crop-handle" data-crop-corner="2" type="button" aria-label="Bottom right crop corner"></button>
+                  <button class="enhancement-crop-handle" data-crop-corner="3" type="button" aria-label="Bottom left crop corner"></button>
+                </div>
+              </div>
+
+              <div class="enhancement-crop-panel__actions">
+                <button class="button button--quiet" id="enhancement-crop-cancel" type="button">Cancel</button>
+                <button class="button button--primary" id="enhancement-crop-done" type="button">Use this crop</button>
+              </div>
+            </section>
+
+            <div class="enhancement-presets" id="enhancement-presets" aria-label="Image enhancement presets">
+              <button type="button" data-enhancement="original">Original<small>No cleanup</small></button>
+              <button type="button" data-enhancement="auto">Auto Scan<small>Balanced page cleanup</small></button>
+              <button type="button" data-enhancement="document">Clean Document<small>White paper + clearer ink</small></button>
+              <button type="button" data-enhancement="vivid">Color Scan<small>Stronger color + contrast</small></button>
+              <button type="button" data-enhancement="grayscale">Clean Gray<small>Local contrast grayscale</small></button>
+              <button type="button" data-enhancement="bw">B&amp;W Scan<small>Adaptive text threshold</small></button>
+              <button type="button" data-enhancement="shadow">Remove Shadows<small>Flatten uneven lighting</small></button>
+              <button type="button" data-enhancement="sharpen">Text Boost<small>Sharper edges, less haze</small></button>
+              <button type="button" data-enhancement="denoise">Denoise<small>Edge-preserving cleanup</small></button>
+              <button type="button" data-enhancement="photo">Photo Enhance<small>Natural tone + detail</small></button>
+            </div>
           </div>
 
           <div class="enhancement-card__footer">
             <p id="enhancement-status">Preview is processed locally in your browser.</p>
 
             <div>
-              <button class="button button--quiet" id="enhancement-apply-all" type="button">Apply to all pages</button>
+              <button class="button button--quiet" id="enhancement-apply-all" type="button">Apply enhancement to all</button>
               <button class="button button--primary" id="enhancement-apply-page" type="button">Apply to this page</button>
             </div>
           </div>

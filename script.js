@@ -470,6 +470,51 @@
     enhancementStatus:
       $("#enhancement-status"),
 
+    enhancementScroll:
+      $("#enhancement-scroll"),
+
+    enhancementCompare:
+      $("#enhancement-compare"),
+
+    enhancementPresets:
+      $("#enhancement-presets"),
+
+    enhancementCropOpen:
+      $("#enhancement-crop-open"),
+
+    enhancementCropState:
+      $("#enhancement-crop-state"),
+
+    enhancementCropPanel:
+      $("#enhancement-crop-panel"),
+
+    enhancementCropStage:
+      $("#enhancement-crop-stage"),
+
+    enhancementCropImage:
+      $("#enhancement-crop-image"),
+
+    enhancementCropPolygon:
+      $("#enhancement-crop-polygon"),
+
+    enhancementCropLine:
+      $("#enhancement-crop-line"),
+
+    enhancementCropHandles:
+      $$("[data-crop-corner]"),
+
+    enhancementCropAuto:
+      $("#enhancement-crop-auto"),
+
+    enhancementCropReset:
+      $("#enhancement-crop-reset"),
+
+    enhancementCropCancel:
+      $("#enhancement-crop-cancel"),
+
+    enhancementCropDone:
+      $("#enhancement-crop-done"),
+
     enhancementPresetButtons:
       $$("[data-enhancement]"),
 
@@ -1636,31 +1681,31 @@
     },
 
     auto: {
-      label: "Auto"
+      label: "Auto Scan"
     },
 
     document: {
-      label: "Document"
+      label: "Clean Document"
     },
 
     vivid: {
-      label: "Vivid Color"
+      label: "Color Scan"
     },
 
     grayscale: {
-      label: "Grayscale"
+      label: "Clean Gray"
     },
 
     bw: {
-      label: "B&W"
+      label: "B&W Scan"
     },
 
     shadow: {
-      label: "Shadow Fix"
+      label: "Remove Shadows"
     },
 
     sharpen: {
-      label: "Sharp Text"
+      label: "Text Boost"
     },
 
     denoise: {
@@ -1668,9 +1713,17 @@
     },
 
     photo: {
-      label: "Photo"
+      label: "Photo Enhance"
     }
   };
+
+
+  const FULL_CROP_QUAD = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+    { x: 0, y: 1 }
+  ];
 
 
   let enhancementSession = {
@@ -1679,8 +1732,16 @@
     mode: "original",
     previewUrl: "",
     requestId: 0,
-    returnFocus: null
+    returnFocus: null,
+    cropQuad: null,
+    savedCropQuad: null,
+    cropEditing: false
   };
+
+
+  let openCvPromise = null;
+
+
 
 
   function clampChannel(value) {
@@ -1699,6 +1760,273 @@
       IMAGE_ENHANCEMENT_PRESETS[mode]?.label
       ||
       IMAGE_ENHANCEMENT_PRESETS.original.label
+    );
+  }
+
+
+  function cloneCropQuad(quad) {
+    const source =
+      Array.isArray(quad)
+      && quad.length === 4
+        ? quad
+        : FULL_CROP_QUAD;
+
+
+    return source.map(
+      (point) => ({
+        x: Math.max(0, Math.min(1, Number(point?.x) || 0)),
+        y: Math.max(0, Math.min(1, Number(point?.y) || 0))
+      })
+    );
+  }
+
+
+  function isFullCropQuad(quad) {
+    if (
+      !Array.isArray(quad)
+      || quad.length !== 4
+    ) {
+      return true;
+    }
+
+
+    return quad.every(
+      (point, index) => {
+        const target =
+          FULL_CROP_QUAD[index];
+
+
+        return (
+          Math.abs(point.x - target.x) < 0.002
+          &&
+          Math.abs(point.y - target.y) < 0.002
+        );
+      }
+    );
+  }
+
+
+  function cropDistance(a, b) {
+    return Math.hypot(
+      b.x - a.x,
+      b.y - a.y
+    );
+  }
+
+
+  function orderCropPoints(points) {
+    if (
+      !Array.isArray(points)
+      || points.length !== 4
+    ) {
+      return cloneCropQuad();
+    }
+
+
+    const bySum =
+      [...points].sort(
+        (a, b) =>
+          (a.x + a.y)
+          -
+          (b.x + b.y)
+      );
+
+
+    const byDifference =
+      [...points].sort(
+        (a, b) =>
+          (a.x - a.y)
+          -
+          (b.x - b.y)
+      );
+
+
+    return [
+      bySum[0],
+      byDifference[3],
+      bySum[3],
+      byDifference[0]
+    ].map(
+      (point) => ({
+        x: Math.max(0, Math.min(1, point.x)),
+        y: Math.max(0, Math.min(1, point.y))
+      })
+    );
+  }
+
+
+
+  async function waitForOpenCvReady() {
+    const started =
+      Date.now();
+
+
+    while (
+      Date.now() - started < 16000
+    ) {
+      let candidate =
+        window.cv;
+
+
+      try {
+        if (
+          candidate
+          && typeof candidate.then === "function"
+        ) {
+          candidate =
+            await candidate;
+
+
+          window.cv =
+            candidate;
+        }
+      }
+      catch (error) {
+        throw error;
+      }
+
+
+      if (
+        candidate
+        && candidate.Mat
+        && typeof candidate.imread === "function"
+        && typeof candidate.warpPerspective === "function"
+      ) {
+        return candidate;
+      }
+
+
+      await new Promise(
+        (resolve) =>
+          window.setTimeout(
+            resolve,
+            80
+          )
+      );
+    }
+
+
+    throw new Error(
+      "Advanced scan engine timed out."
+    );
+  }
+
+
+  function loadOpenCv() {
+    if (
+      window.cv
+      && window.cv.Mat
+      && typeof window.cv.imread === "function"
+    ) {
+      return Promise.resolve(
+        window.cv
+      );
+    }
+
+
+    if (
+      openCvPromise
+    ) {
+      return openCvPromise;
+    }
+
+
+    openCvPromise =
+      new Promise(
+        (resolve, reject) => {
+          const existing =
+            document.querySelector(
+              "script[data-mazedocs-opencv]"
+            );
+
+
+          const finish =
+            () => {
+              waitForOpenCvReady()
+                .then(resolve)
+                .catch(
+                  (error) => {
+                    openCvPromise =
+                      null;
+
+
+                    reject(error);
+                  }
+                );
+            };
+
+
+          if (
+            existing
+          ) {
+            finish();
+
+            return;
+          }
+
+
+          const script =
+            document.createElement(
+              "script"
+            );
+
+
+          script.src =
+            "https://docs.opencv.org/4.x/opencv.js";
+
+
+          script.async =
+            true;
+
+
+          script.dataset.mazedocsOpencv =
+            "true";
+
+
+          script.addEventListener(
+            "load",
+            finish,
+            {
+              once: true
+            }
+          );
+
+
+          script.addEventListener(
+            "error",
+            () => {
+              openCvPromise =
+                null;
+
+
+              reject(
+                new Error(
+                  "Could not load the advanced scan engine."
+                )
+              );
+            },
+            {
+              once: true
+            }
+          );
+
+
+          document.head.appendChild(
+            script
+          );
+        }
+      );
+
+
+    return openCvPromise;
+  }
+
+
+  function warmAdvancedScanEngine() {
+    loadOpenCv().catch(
+      () => {
+        /* Canvas fallbacks remain available offline. */
+      }
     );
   }
 
@@ -2204,23 +2532,150 @@
     );
 
 
+    /*
+     * Large-radius illumination estimation is done on a small copy and then
+     * scaled back up. It produces a smoother page-lighting map while avoiding
+     * an expensive 50–100 px blur over every full-resolution PDF page.
+     */
     if (
-      "filter" in context
+      radius > 3
     ) {
-      context.filter =
-        `blur(${radius}px)`;
+      const maximumSide =
+        360;
+
+
+      const scale =
+        Math.min(
+          1,
+          maximumSide /
+          Math.max(
+            canvas.width,
+            canvas.height
+          )
+        );
+
+
+      const small =
+        document.createElement(
+          "canvas"
+        );
+
+
+      small.width =
+        Math.max(
+          24,
+          Math.round(
+            canvas.width * scale
+          )
+        );
+
+
+      small.height =
+        Math.max(
+          24,
+          Math.round(
+            canvas.height * scale
+          )
+        );
+
+
+      const smallContext =
+        small.getContext(
+          "2d"
+        );
+
+
+      smallContext.imageSmoothingEnabled =
+        true;
+
+
+      smallContext.imageSmoothingQuality =
+        "high";
+
+
+      smallContext.drawImage(
+        canvas,
+        0,
+        0,
+        small.width,
+        small.height
+      );
+
+
+      const softened =
+        document.createElement(
+          "canvas"
+        );
+
+
+      softened.width =
+        small.width;
+
+
+      softened.height =
+        small.height;
+
+
+      const softenedContext =
+        softened.getContext(
+          "2d"
+        );
+
+
+      if (
+        "filter" in softenedContext
+      ) {
+        softenedContext.filter =
+          `blur(${Math.max(4, Math.min(14, radius * scale * 1.8))}px)`;
+      }
+
+
+      softenedContext.drawImage(
+        small,
+        0,
+        0
+      );
+
+
+      softenedContext.filter =
+        "none";
+
+
+      context.imageSmoothingEnabled =
+        true;
+
+
+      context.imageSmoothingQuality =
+        "high";
+
+
+      context.drawImage(
+        softened,
+        0,
+        0,
+        blurred.width,
+        blurred.height
+      );
     }
+    else {
+      if (
+        "filter" in context
+      ) {
+        context.filter =
+          `blur(${radius}px)`;
+      }
 
 
-    context.drawImage(
-      canvas,
-      0,
-      0
-    );
+      context.drawImage(
+        canvas,
+        0,
+        0
+      );
 
 
-    context.filter =
-      "none";
+      context.filter =
+        "none";
+    }
 
 
     return context.getImageData(
@@ -2230,6 +2685,7 @@
       blurred.height
     );
   }
+
 
 
   function normalizePageLighting(
@@ -2582,15 +3038,619 @@
   }
 
 
-  function applyEnhancementPreset(
+  function applyGrayWorldBalance(
+    imageData,
+    strength = 0.3
+  ) {
+    const pixels =
+      imageData.data;
+
+
+    let redTotal = 0;
+    let greenTotal = 0;
+    let blueTotal = 0;
+    let count = 0;
+
+
+    const pixelCount =
+      Math.max(
+        1,
+        pixels.length / 4
+      );
+
+
+    const stride =
+      Math.max(
+        1,
+        Math.floor(
+          pixelCount / 90000
+        )
+      );
+
+
+    for (
+      let pixelIndex = 0;
+      pixelIndex < pixelCount;
+      pixelIndex += stride
+    ) {
+      const offset =
+        pixelIndex * 4;
+
+
+      if (
+        pixels[offset + 3] < 8
+      ) {
+        continue;
+      }
+
+
+      redTotal +=
+        pixels[offset];
+
+
+      greenTotal +=
+        pixels[offset + 1];
+
+
+      blueTotal +=
+        pixels[offset + 2];
+
+
+      count += 1;
+    }
+
+
+    if (
+      count < 8
+    ) {
+      return;
+    }
+
+
+    const redMean =
+      redTotal / count;
+
+
+    const greenMean =
+      greenTotal / count;
+
+
+    const blueMean =
+      blueTotal / count;
+
+
+    const neutral =
+      (
+        redMean
+        + greenMean
+        + blueMean
+      ) / 3;
+
+
+    const redScale =
+      1
+      +
+      (
+        neutral /
+        Math.max(1, redMean)
+        - 1
+      ) * strength;
+
+
+    const greenScale =
+      1
+      +
+      (
+        neutral /
+        Math.max(1, greenMean)
+        - 1
+      ) * strength;
+
+
+    const blueScale =
+      1
+      +
+      (
+        neutral /
+        Math.max(1, blueMean)
+        - 1
+      ) * strength;
+
+
+    for (
+      let index = 0;
+      index < pixels.length;
+      index += 4
+    ) {
+      if (
+        pixels[index + 3] === 0
+      ) {
+        continue;
+      }
+
+
+      pixels[index] =
+        clampChannel(
+          pixels[index] * redScale
+        );
+
+
+      pixels[index + 1] =
+        clampChannel(
+          pixels[index + 1] * greenScale
+        );
+
+
+      pixels[index + 2] =
+        clampChannel(
+          pixels[index + 2] * blueScale
+        );
+    }
+  }
+
+
+  function liftPaperWhites(
+    imageData,
+    start = 174,
+    strength = 0.58
+  ) {
+    const pixels =
+      imageData.data;
+
+
+    for (
+      let index = 0;
+      index < pixels.length;
+      index += 4
+    ) {
+      if (
+        pixels[index + 3] === 0
+      ) {
+        continue;
+      }
+
+
+      const gray =
+        luminance(
+          pixels[index],
+          pixels[index + 1],
+          pixels[index + 2]
+        );
+
+
+      if (
+        gray <= start
+      ) {
+        continue;
+      }
+
+
+      const progress =
+        Math.min(
+          1,
+          (
+            gray - start
+          ) /
+          Math.max(
+            1,
+            255 - start
+          )
+        );
+
+
+      const lift =
+        progress
+        * progress
+        * 26
+        * strength;
+
+
+      pixels[index] =
+        clampChannel(
+          pixels[index] + lift
+        );
+
+
+      pixels[index + 1] =
+        clampChannel(
+          pixels[index + 1] + lift
+        );
+
+
+      pixels[index + 2] =
+        clampChannel(
+          pixels[index + 2] + lift
+        );
+    }
+  }
+
+
+  async function getOpenCvForEnhancement() {
+    try {
+      return await Promise.race([
+        loadOpenCv(),
+        new Promise(
+          (_, reject) =>
+            window.setTimeout(
+              () => reject(
+                new Error(
+                  "Advanced scan engine is still loading."
+                )
+              ),
+              4200
+            )
+        )
+      ]);
+    }
+    catch (error) {
+      return null;
+    }
+  }
+
+
+  async function applyOpenCvEnhancement(
+    canvas,
+    mode
+  ) {
+    if (
+      ![
+        "grayscale",
+        "bw",
+        "sharpen",
+        "denoise"
+      ].includes(mode)
+    ) {
+      return false;
+    }
+
+
+    const cv =
+      await getOpenCvForEnhancement();
+
+
+    if (
+      !cv
+    ) {
+      return false;
+    }
+
+
+    const mats = [];
+
+
+    try {
+      const src =
+        cv.imread(canvas);
+
+
+      mats.push(src);
+
+
+      if (
+        mode === "bw"
+      ) {
+        const gray =
+          new cv.Mat();
+
+
+        const softened =
+          new cv.Mat();
+
+
+        const thresholded =
+          new cv.Mat();
+
+
+        const rgba =
+          new cv.Mat();
+
+
+        mats.push(
+          gray,
+          softened,
+          thresholded,
+          rgba
+        );
+
+
+        cv.cvtColor(
+          src,
+          gray,
+          cv.COLOR_RGBA2GRAY
+        );
+
+
+        cv.GaussianBlur(
+          gray,
+          softened,
+          new cv.Size(3, 3),
+          0,
+          0,
+          cv.BORDER_DEFAULT
+        );
+
+
+        let blockSize =
+          Math.round(
+            Math.min(
+              canvas.width,
+              canvas.height
+            ) /
+            28
+          );
+
+
+        blockSize =
+          Math.max(
+            21,
+            Math.min(
+              71,
+              blockSize
+            )
+          );
+
+
+        if (
+          blockSize % 2 === 0
+        ) {
+          blockSize += 1;
+        }
+
+
+        cv.adaptiveThreshold(
+          softened,
+          thresholded,
+          255,
+          cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+          cv.THRESH_BINARY,
+          blockSize,
+          12
+        );
+
+
+        cv.medianBlur(
+          thresholded,
+          thresholded,
+          3
+        );
+
+
+        cv.cvtColor(
+          thresholded,
+          rgba,
+          cv.COLOR_GRAY2RGBA
+        );
+
+
+        cv.imshow(
+          canvas,
+          rgba
+        );
+
+
+        return true;
+      }
+
+
+      if (
+        mode === "grayscale"
+      ) {
+        const gray =
+          new cv.Mat();
+
+
+        const contrasted =
+          new cv.Mat();
+
+
+        const rgba =
+          new cv.Mat();
+
+
+        mats.push(
+          gray,
+          contrasted,
+          rgba
+        );
+
+
+        cv.cvtColor(
+          src,
+          gray,
+          cv.COLOR_RGBA2GRAY
+        );
+
+
+        if (
+          typeof cv.createCLAHE === "function"
+        ) {
+          const clahe =
+            cv.createCLAHE(
+              2.15,
+              new cv.Size(8, 8)
+            );
+
+
+          clahe.apply(
+            gray,
+            contrasted
+          );
+
+
+          clahe.delete?.();
+        }
+        else {
+          cv.equalizeHist(
+            gray,
+            contrasted
+          );
+        }
+
+
+        cv.cvtColor(
+          contrasted,
+          rgba,
+          cv.COLOR_GRAY2RGBA
+        );
+
+
+        cv.imshow(
+          canvas,
+          rgba
+        );
+
+
+        return true;
+      }
+
+
+      if (
+        mode === "denoise"
+      ) {
+        const rgb =
+          new cv.Mat();
+
+
+        const filtered =
+          new cv.Mat();
+
+
+        const rgba =
+          new cv.Mat();
+
+
+        mats.push(
+          rgb,
+          filtered,
+          rgba
+        );
+
+
+        cv.cvtColor(
+          src,
+          rgb,
+          cv.COLOR_RGBA2RGB
+        );
+
+
+        cv.bilateralFilter(
+          rgb,
+          filtered,
+          7,
+          42,
+          42,
+          cv.BORDER_DEFAULT
+        );
+
+
+        cv.cvtColor(
+          filtered,
+          rgba,
+          cv.COLOR_RGB2RGBA
+        );
+
+
+        cv.imshow(
+          canvas,
+          rgba
+        );
+
+
+        return true;
+      }
+
+
+      if (
+        mode === "sharpen"
+      ) {
+        const blurred =
+          new cv.Mat();
+
+
+        const sharpened =
+          new cv.Mat();
+
+
+        mats.push(
+          blurred,
+          sharpened
+        );
+
+
+        cv.GaussianBlur(
+          src,
+          blurred,
+          new cv.Size(5, 5),
+          1.05,
+          1.05,
+          cv.BORDER_DEFAULT
+        );
+
+
+        cv.addWeighted(
+          src,
+          1.72,
+          blurred,
+          -0.72,
+          0,
+          sharpened
+        );
+
+
+        cv.imshow(
+          canvas,
+          sharpened
+        );
+
+
+        return true;
+      }
+    }
+    catch (error) {
+      console.warn(
+        "MazeDocs advanced enhancement fallback:",
+        error
+      );
+    }
+    finally {
+      mats.forEach(
+        (mat) => {
+          try {
+            mat?.delete?.();
+          }
+          catch (error) {
+            /* Ignore cleanup errors from partially constructed Mats. */
+          }
+        }
+      );
+    }
+
+
+    return false;
+  }
+
+
+  async function applyEnhancementPreset(
     canvas,
     mode
   ) {
     if (
       !mode
-      ||
-      mode ===
-      "original"
+      || mode === "original"
+    ) {
+      return;
+    }
+
+
+    const handledByOpenCv =
+      await applyOpenCvEnhancement(
+        canvas,
+        mode
+      );
+
+
+    if (
+      handledByOpenCv
     ) {
       return;
     }
@@ -2607,12 +3667,12 @@
 
 
     if (
-      mode ===
-      "denoise"
+      mode === "denoise"
     ) {
       applySoftDenoise(
         canvas
       );
+
 
       return;
     }
@@ -2628,29 +3688,68 @@
 
 
     if (
-      mode ===
-      "auto"
+      mode === "auto"
     ) {
+      const backgroundData =
+        createBlurredBackground(
+          canvas,
+          Math.max(
+            14,
+            Math.round(
+              Math.min(
+                canvas.width,
+                canvas.height
+              ) * 0.026
+            )
+          )
+        );
+
+
+      normalizePageLighting(
+        imageData,
+        backgroundData,
+        0.38
+      );
+
+
+      applyGrayWorldBalance(
+        imageData,
+        0.24
+      );
+
+
       applyAutoTone(
         imageData,
         {
-          saturation: 1.05,
-          contrast: 1.05,
-          brightness: 2
+          saturation: 1.035,
+          contrast: 1.08,
+          brightness: 3
         }
+      );
+
+
+      liftPaperWhites(
+        imageData,
+        186,
+        0.28
       );
     }
 
 
     if (
-      mode ===
-      "photo"
+      mode === "photo"
     ) {
+      applyGrayWorldBalance(
+        imageData,
+        0.18
+      );
+
+
       applyAutoTone(
         imageData,
         {
-          saturation: 1.13,
-          contrast: 1.055,
+          saturation: 1.09,
+          contrast: 1.045,
           brightness: 1
         }
       );
@@ -2658,14 +3757,19 @@
 
 
     if (
-      mode ===
-      "vivid"
+      mode === "vivid"
     ) {
+      applyGrayWorldBalance(
+        imageData,
+        0.3
+      );
+
+
       applyAutoTone(
         imageData,
         {
-          saturation: 1.28,
-          contrast: 1.1,
+          saturation: 1.25,
+          contrast: 1.12,
           brightness: 2
         }
       );
@@ -2673,14 +3777,13 @@
 
 
     if (
-      mode ===
-      "grayscale"
+      mode === "grayscale"
     ) {
       applyAutoTone(
         imageData,
         {
           saturation: 1,
-          contrast: 1.04,
+          contrast: 1.095,
           brightness: 2
         }
       );
@@ -2693,34 +3796,27 @@
 
 
     if (
-      mode ===
-      "shadow"
-      ||
-      mode ===
-      "document"
-      ||
-      mode ===
-      "bw"
+      mode === "shadow"
+      || mode === "document"
+      || mode === "bw"
     ) {
       const backgroundData =
         createBlurredBackground(
           canvas,
           Math.max(
-            10,
+            18,
             Math.round(
               Math.min(
                 canvas.width,
                 canvas.height
-              ) *
-              0.018
+              ) * 0.038
             )
           )
         );
 
 
       if (
-        mode ===
-        "bw"
+        mode === "bw"
       ) {
         applyBlackAndWhite(
           imageData,
@@ -2731,116 +3827,95 @@
         normalizePageLighting(
           imageData,
           backgroundData,
-          mode ===
-          "document"
-            ? 0.94
-            : 0.72
+          mode === "document"
+            ? 0.96
+            : 0.86
+        );
+
+
+        applyGrayWorldBalance(
+          imageData,
+          mode === "document"
+            ? 0.38
+            : 0.28
         );
 
 
         applyAutoTone(
           imageData,
-          mode ===
-          "document"
+          mode === "document"
             ? {
-                saturation: 0.96,
-                contrast: 1.13,
-                brightness: 8
+                saturation: 0.94,
+                contrast: 1.16,
+                brightness: 7
               }
             : {
-                saturation: 1.02,
-                contrast: 1.055,
+                saturation: 1.015,
+                contrast: 1.08,
                 brightness: 4
               }
         );
 
 
-        if (
-          mode ===
-          "document"
-        ) {
-          const pixels =
-            imageData.data;
-
-
-          for (
-            let index = 0;
-            index < pixels.length;
-            index += 4
-          ) {
-            const gray =
-              luminance(
-                pixels[index],
-                pixels[index + 1],
-                pixels[index + 2]
-              );
-
-
-            if (
-              gray >
-              188
-            ) {
-              const lift =
-                (
-                  gray - 188
-                ) /
-                67;
-
-
-              pixels[index] =
-                clampChannel(
-                  pixels[index]
-                  +
-                  15 * lift
-                );
-
-
-              pixels[index + 1] =
-                clampChannel(
-                  pixels[index + 1]
-                  +
-                  15 * lift
-                );
-
-
-              pixels[index + 2] =
-                clampChannel(
-                  pixels[index + 2]
-                  +
-                  15 * lift
-                );
-            }
-          }
-        }
+        liftPaperWhites(
+          imageData,
+          mode === "document"
+            ? 166
+            : 182,
+          mode === "document"
+            ? 0.78
+            : 0.42
+        );
       }
     }
 
 
     if (
-      mode ===
-      "sharpen"
+      mode === "sharpen"
     ) {
       applyAutoTone(
         imageData,
         {
-          saturation: 1.01,
-          contrast: 1.08,
+          saturation: 1,
+          contrast: 1.1,
           brightness: 1
         }
       );
+    }
 
 
-      context.putImageData(
-        imageData,
-        0,
-        0
-      );
+    context.putImageData(
+      imageData,
+      0,
+      0
+    );
+
+
+    if (
+      [
+        "auto",
+        "document",
+        "vivid",
+        "photo",
+        "sharpen"
+      ].includes(mode)
+    ) {
+      const amount =
+        mode === "sharpen"
+          ? 0.82
+          : mode === "document"
+            ? 0.48
+            : mode === "vivid"
+              ? 0.34
+              : 0.24;
 
 
       const blurredData =
         createBlurredBackground(
           canvas,
-          1.15
+          mode === "sharpen"
+            ? 1.05
+            : 0.85
         );
 
 
@@ -2856,23 +3931,327 @@
       applyUnsharpMask(
         imageData,
         blurredData,
-        0.72
+        amount
       );
+
+
+      context.putImageData(
+        imageData,
+        0,
+        0
+      );
+    }
+  }
+
+
+
+  function cropCanvasToBounds(
+    canvas,
+    quad
+  ) {
+    const points =
+      cloneCropQuad(quad);
+
+
+    const xs =
+      points.map(
+        (point) =>
+          point.x * canvas.width
+      );
+
+
+    const ys =
+      points.map(
+        (point) =>
+          point.y * canvas.height
+      );
+
+
+    const left =
+      Math.max(
+        0,
+        Math.floor(
+          Math.min(...xs)
+        )
+      );
+
+
+    const top =
+      Math.max(
+        0,
+        Math.floor(
+          Math.min(...ys)
+        )
+      );
+
+
+    const right =
+      Math.min(
+        canvas.width,
+        Math.ceil(
+          Math.max(...xs)
+        )
+      );
+
+
+    const bottom =
+      Math.min(
+        canvas.height,
+        Math.ceil(
+          Math.max(...ys)
+        )
+      );
+
+
+    const width =
+      Math.max(
+        1,
+        right - left
+      );
+
+
+    const height =
+      Math.max(
+        1,
+        bottom - top
+      );
+
+
+    const output =
+      document.createElement(
+        "canvas"
+      );
+
+
+    output.width =
+      width;
+
+
+    output.height =
+      height;
+
+
+    const context =
+      output.getContext(
+        "2d",
+        {
+          alpha: true,
+          willReadFrequently: true
+        }
+      );
+
+
+    context.drawImage(
+      canvas,
+      left,
+      top,
+      width,
+      height,
+      0,
+      0,
+      width,
+      height
+    );
+
+
+    return {
+      canvas: output,
+      context,
+      width,
+      height
+    };
+  }
+
+
+  async function applyPerspectiveCrop(
+    work,
+    quad
+  ) {
+    if (
+      isFullCropQuad(quad)
+    ) {
+      return work;
     }
 
 
-    context.putImageData(
-      imageData,
-      0,
-      0
-    );
+    const normalized =
+      cloneCropQuad(quad);
+
+
+    const sourcePoints =
+      normalized.map(
+        (point) => ({
+          x: point.x * work.canvas.width,
+          y: point.y * work.canvas.height
+        })
+      );
+
+
+    const outputWidth =
+      Math.max(
+        32,
+        Math.round(
+          Math.max(
+            cropDistance(
+              sourcePoints[0],
+              sourcePoints[1]
+            ),
+            cropDistance(
+              sourcePoints[3],
+              sourcePoints[2]
+            )
+          )
+        )
+      );
+
+
+    const outputHeight =
+      Math.max(
+        32,
+        Math.round(
+          Math.max(
+            cropDistance(
+              sourcePoints[0],
+              sourcePoints[3]
+            ),
+            cropDistance(
+              sourcePoints[1],
+              sourcePoints[2]
+            )
+          )
+        )
+      );
+
+
+    try {
+      const cv =
+        await loadOpenCv();
+
+
+      const src =
+        cv.imread(
+          work.canvas
+        );
+
+
+      const dst =
+        new cv.Mat();
+
+
+      const sourceMatrix =
+        cv.matFromArray(
+          4,
+          1,
+          cv.CV_32FC2,
+          sourcePoints.flatMap(
+            (point) => [
+              point.x,
+              point.y
+            ]
+          )
+        );
+
+
+      const destinationMatrix =
+        cv.matFromArray(
+          4,
+          1,
+          cv.CV_32FC2,
+          [
+            0,
+            0,
+            outputWidth - 1,
+            0,
+            outputWidth - 1,
+            outputHeight - 1,
+            0,
+            outputHeight - 1
+          ]
+        );
+
+
+      const transform =
+        cv.getPerspectiveTransform(
+          sourceMatrix,
+          destinationMatrix
+        );
+
+
+      cv.warpPerspective(
+        src,
+        dst,
+        transform,
+        new cv.Size(
+          outputWidth,
+          outputHeight
+        ),
+        cv.INTER_CUBIC,
+        cv.BORDER_REPLICATE,
+        new cv.Scalar()
+      );
+
+
+      const output =
+        document.createElement(
+          "canvas"
+        );
+
+
+      output.width =
+        outputWidth;
+
+
+      output.height =
+        outputHeight;
+
+
+      cv.imshow(
+        output,
+        dst
+      );
+
+
+      src.delete();
+      dst.delete();
+      sourceMatrix.delete();
+      destinationMatrix.delete();
+      transform.delete();
+
+
+      return {
+        canvas: output,
+        context:
+          output.getContext(
+            "2d",
+            {
+              alpha: true,
+              willReadFrequently: true
+            }
+          ),
+        width: outputWidth,
+        height: outputHeight
+      };
+    }
+    catch (error) {
+      console.warn(
+        "MazeDocs perspective crop fallback:",
+        error
+      );
+
+
+      return cropCanvasToBounds(
+        work.canvas,
+        normalized
+      );
+    }
   }
 
 
   async function renderImageWithEnhancement(
     file,
     mode = "original",
-    maximumDimension = 2600
+    maximumDimension = 2600,
+    cropQuad = null
   ) {
     const image =
       await loadImageElement(
@@ -2880,21 +4259,42 @@
       );
 
 
-    const work =
+    let work =
       createWorkingCanvas(
         image,
         maximumDimension
       );
 
 
-    applyEnhancementPreset(
+    if (
+      cropQuad
+      && !isFullCropQuad(cropQuad)
+    ) {
+      work =
+        await applyPerspectiveCrop(
+          work,
+          cropQuad
+        );
+    }
+
+
+    await applyEnhancementPreset(
       work.canvas,
       mode
     );
 
 
+    work.width =
+      work.canvas.width;
+
+
+    work.height =
+      work.canvas.height;
+
+
     return work;
   }
+
 
 
   async function canvasToObjectUrl(
@@ -2947,6 +4347,27 @@
   }
 
 
+  function updateEnhancementCropState() {
+    if (
+      !elements.enhancementCropState
+    ) {
+      return;
+    }
+
+
+    const cropped =
+      !isFullCropQuad(
+        enhancementSession.cropQuad
+      );
+
+
+    elements.enhancementCropState.textContent =
+      cropped
+        ? "CROP READY"
+        : "FULL PAGE";
+  }
+
+
   async function renderEnhancementPreview() {
     const item =
       enhancementSession.item;
@@ -2954,8 +4375,7 @@
 
     if (
       !item
-      ||
-      !elements.enhancementPreview
+      || !elements.enhancementPreview
     ) {
       return;
     }
@@ -2963,12 +4383,26 @@
 
     const mode =
       enhancementSession.mode
-      ||
-      "original";
+      || "original";
+
+
+    const cropQuad =
+      cloneCropQuad(
+        enhancementSession.cropQuad
+      );
+
+
+    const cropped =
+      !isFullCropQuad(
+        cropQuad
+      );
 
 
     const requestId =
       ++enhancementSession.requestId;
+
+
+    updateEnhancementCropState();
 
 
     elements.enhancementPresetButtons.forEach(
@@ -2993,14 +4427,12 @@
 
 
     elements.enhancementPreviewLabel.textContent =
-      getEnhancementLabel(
-        mode
-      );
+      `${getEnhancementLabel(mode)}${cropped ? " · Cropped" : ""}`;
 
 
     if (
-      mode ===
-      "original"
+      mode === "original"
+      && !cropped
     ) {
       releaseEnhancementPreview();
 
@@ -3014,7 +4446,7 @@
 
 
       elements.enhancementStatus.textContent =
-        "Original image selected. No processing will be applied.";
+        "Original image selected. No cleanup or crop will be applied.";
 
 
       return;
@@ -3026,7 +4458,9 @@
 
 
     elements.enhancementStatus.textContent =
-      "Rendering a local preview…";
+      cropped
+        ? "Straightening crop and rendering a local preview…"
+        : "Rendering an improved local preview…";
 
 
     await new Promise(
@@ -3046,7 +4480,7 @@
           "(max-width: 720px)"
         ).matches
           ? 760
-          : 1100;
+          : 1200;
 
 
       const {
@@ -3055,7 +4489,8 @@
         await renderImageWithEnhancement(
           item.file,
           mode,
-          previewDimension
+          previewDimension,
+          cropQuad
         );
 
 
@@ -3103,8 +4538,22 @@
         previewUrl;
 
 
+      const parts = [
+        getEnhancementLabel(mode)
+      ];
+
+
+      if (
+        cropped
+      ) {
+        parts.push(
+          "perspective crop"
+        );
+      }
+
+
       elements.enhancementStatus.textContent =
-        `${getEnhancementLabel(mode)} preview · processed locally`;
+        `${parts.join(" + ")} · processed locally`;
     }
     catch (error) {
       console.error(
@@ -3132,6 +4581,516 @@
   }
 
 
+
+  function renderCropOverlay() {
+    const quad =
+      cloneCropQuad(
+        enhancementSession.cropQuad
+      );
+
+
+    const pointString =
+      quad
+        .map(
+          (point) =>
+            `${(point.x * 100).toFixed(3)},${(point.y * 100).toFixed(3)}`
+        )
+        .join(" ");
+
+
+    if (
+      elements.enhancementCropPolygon
+    ) {
+      elements.enhancementCropPolygon.setAttribute(
+        "points",
+        pointString
+      );
+    }
+
+
+    if (
+      elements.enhancementCropLine
+    ) {
+      const first =
+        quad[0];
+
+
+      elements.enhancementCropLine.setAttribute(
+        "points",
+        `${pointString} ${(first.x * 100).toFixed(3)},${(first.y * 100).toFixed(3)}`
+      );
+    }
+
+
+    elements.enhancementCropHandles.forEach(
+      (handle, index) => {
+        const point =
+          quad[index];
+
+
+        if (
+          !point
+        ) {
+          return;
+        }
+
+
+        handle.style.left =
+          `${point.x * 100}%`;
+
+
+        handle.style.top =
+          `${point.y * 100}%`;
+      }
+    );
+
+
+    updateEnhancementCropState();
+  }
+
+
+  function setEnhancementCropQuad(quad) {
+    enhancementSession.cropQuad =
+      cloneCropQuad(quad);
+
+
+    renderCropOverlay();
+  }
+
+
+  function constrainCropPoint(
+    index,
+    x,
+    y
+  ) {
+    const quad =
+      cloneCropQuad(
+        enhancementSession.cropQuad
+      );
+
+
+    const gap =
+      0.025;
+
+
+    let nextX =
+      Math.max(
+        0,
+        Math.min(
+          1,
+          x
+        )
+      );
+
+
+    let nextY =
+      Math.max(
+        0,
+        Math.min(
+          1,
+          y
+        )
+      );
+
+
+    if (
+      index === 0
+    ) {
+      nextX =
+        Math.min(
+          nextX,
+          quad[1].x - gap
+        );
+
+
+      nextY =
+        Math.min(
+          nextY,
+          quad[3].y - gap
+        );
+    }
+
+
+    if (
+      index === 1
+    ) {
+      nextX =
+        Math.max(
+          nextX,
+          quad[0].x + gap
+        );
+
+
+      nextY =
+        Math.min(
+          nextY,
+          quad[2].y - gap
+        );
+    }
+
+
+    if (
+      index === 2
+    ) {
+      nextX =
+        Math.max(
+          nextX,
+          quad[3].x + gap
+        );
+
+
+      nextY =
+        Math.max(
+          nextY,
+          quad[1].y + gap
+        );
+    }
+
+
+    if (
+      index === 3
+    ) {
+      nextX =
+        Math.min(
+          nextX,
+          quad[2].x - gap
+        );
+
+
+      nextY =
+        Math.max(
+          nextY,
+          quad[0].y + gap
+        );
+    }
+
+
+    return {
+      x: Math.max(0, Math.min(1, nextX)),
+      y: Math.max(0, Math.min(1, nextY))
+    };
+  }
+
+
+  function openCropEditor() {
+    const item =
+      enhancementSession.item;
+
+
+    if (
+      !item
+      || !elements.enhancementCropPanel
+    ) {
+      return;
+    }
+
+
+    enhancementSession.savedCropQuad =
+      cloneCropQuad(
+        enhancementSession.cropQuad
+      );
+
+
+    enhancementSession.cropEditing =
+      true;
+
+
+    elements.enhancementCompare.hidden =
+      true;
+
+
+    elements.enhancementPresets.hidden =
+      true;
+
+
+    elements.enhancementCropPanel.hidden =
+      false;
+
+
+    elements.enhancementCropImage.src =
+      item.previewUrl;
+
+
+    renderCropOverlay();
+
+
+    if (
+      elements.enhancementScroll
+    ) {
+      elements.enhancementScroll.scrollTop =
+        0;
+    }
+
+
+    elements.enhancementStatus.textContent =
+      "Drag the four handles to the document corners. Use Auto edges as a starting point if you want.";
+
+
+    warmAdvancedScanEngine();
+  }
+
+
+  function closeCropEditor(
+    keepChanges
+  ) {
+    if (
+      !enhancementSession.cropEditing
+    ) {
+      return;
+    }
+
+
+    if (
+      !keepChanges
+      && enhancementSession.savedCropQuad
+    ) {
+      enhancementSession.cropQuad =
+        cloneCropQuad(
+          enhancementSession.savedCropQuad
+        );
+    }
+
+
+    enhancementSession.cropEditing =
+      false;
+
+
+    enhancementSession.savedCropQuad =
+      null;
+
+
+    elements.enhancementCropPanel.hidden =
+      true;
+
+
+    elements.enhancementCompare.hidden =
+      false;
+
+
+    elements.enhancementPresets.hidden =
+      false;
+
+
+    renderCropOverlay();
+    renderEnhancementPreview();
+  }
+
+
+  async function detectDocumentCropQuad(file) {
+    const cv =
+      await loadOpenCv();
+
+
+    const image =
+      await loadImageElement(
+        file
+      );
+
+
+    const work =
+      createWorkingCanvas(
+        image,
+        1200
+      );
+
+
+    const mats = [];
+
+
+    try {
+      const src =
+        cv.imread(
+          work.canvas
+        );
+
+
+      const gray =
+        new cv.Mat();
+
+
+      const blurred =
+        new cv.Mat();
+
+
+      const edges =
+        new cv.Mat();
+
+
+      const contours =
+        new cv.MatVector();
+
+
+      const hierarchy =
+        new cv.Mat();
+
+
+      mats.push(
+        src,
+        gray,
+        blurred,
+        edges,
+        contours,
+        hierarchy
+      );
+
+
+      cv.cvtColor(
+        src,
+        gray,
+        cv.COLOR_RGBA2GRAY
+      );
+
+
+      cv.GaussianBlur(
+        gray,
+        blurred,
+        new cv.Size(5, 5),
+        0,
+        0,
+        cv.BORDER_DEFAULT
+      );
+
+
+      cv.Canny(
+        blurred,
+        edges,
+        45,
+        135
+      );
+
+
+      cv.findContours(
+        edges,
+        contours,
+        hierarchy,
+        cv.RETR_LIST,
+        cv.CHAIN_APPROX_SIMPLE
+      );
+
+
+      const minimumArea =
+        work.width
+        * work.height
+        * 0.12;
+
+
+      let bestArea =
+        0;
+
+
+      let bestPoints =
+        null;
+
+
+      for (
+        let index = 0;
+        index < contours.size();
+        index += 1
+      ) {
+        const contour =
+          contours.get(index);
+
+
+        const area =
+          Math.abs(
+            cv.contourArea(
+              contour,
+              false
+            )
+          );
+
+
+        if (
+          area < minimumArea
+          || area <= bestArea
+        ) {
+          contour.delete();
+
+          continue;
+        }
+
+
+        const perimeter =
+          cv.arcLength(
+            contour,
+            true
+          );
+
+
+        const approximation =
+          new cv.Mat();
+
+
+        cv.approxPolyDP(
+          contour,
+          approximation,
+          perimeter * 0.025,
+          true
+        );
+
+
+        if (
+          approximation.rows === 4
+          && approximation.data32S?.length >= 8
+        ) {
+          const raw =
+            approximation.data32S;
+
+
+          const points = [];
+
+
+          for (
+            let pointIndex = 0;
+            pointIndex < 4;
+            pointIndex += 1
+          ) {
+            points.push({
+              x:
+                raw[pointIndex * 2]
+                /
+                work.width,
+              y:
+                raw[pointIndex * 2 + 1]
+                /
+                work.height
+            });
+          }
+
+
+          bestArea =
+            area;
+
+
+          bestPoints =
+            orderCropPoints(
+              points
+            );
+        }
+
+
+        approximation.delete();
+        contour.delete();
+      }
+
+
+      return bestPoints;
+    }
+    finally {
+      mats.forEach(
+        (mat) => {
+          try {
+            mat?.delete?.();
+          }
+          catch (error) {
+            /* Ignore OpenCV cleanup errors. */
+          }
+        }
+      );
+    }
+  }
+
+
   function openEnhancementModal(
     item,
     items,
@@ -3139,8 +5098,7 @@
   ) {
     if (
       !item
-      ||
-      !elements.enhancementModal
+      || !elements.enhancementModal
     ) {
       return;
     }
@@ -3159,14 +5117,26 @@
 
     enhancementSession.mode =
       item.enhancement
-      ||
-      "original";
+      || "original";
+
+
+    enhancementSession.cropQuad =
+      cloneCropQuad(
+        item.cropQuad
+      );
+
+
+    enhancementSession.savedCropQuad =
+      null;
+
+
+    enhancementSession.cropEditing =
+      false;
 
 
     enhancementSession.returnFocus =
       trigger
-      ||
-      document.activeElement;
+      || document.activeElement;
 
 
     elements.enhancementOriginal.src =
@@ -3177,8 +5147,32 @@
       item.previewUrl;
 
 
+    elements.enhancementCropImage.src =
+      item.previewUrl;
+
+
+    elements.enhancementCropPanel.hidden =
+      true;
+
+
+    elements.enhancementCompare.hidden =
+      false;
+
+
+    elements.enhancementPresets.hidden =
+      false;
+
+
     elements.enhancementModal.hidden =
       false;
+
+
+    if (
+      elements.enhancementScroll
+    ) {
+      elements.enhancementScroll.scrollTop =
+        0;
+    }
 
 
     document.body.classList.add(
@@ -3186,7 +5180,15 @@
     );
 
 
+    renderCropOverlay();
     renderEnhancementPreview();
+
+
+    /*
+     * Load the heavier computer-vision engine only when the enhancer is
+     * actually opened. Normal MazeDocs page load remains unchanged.
+     */
+    warmAdvancedScanEngine();
 
 
     window.setTimeout(
@@ -3201,8 +5203,7 @@
   function closeEnhancementModal() {
     if (
       !elements.enhancementModal
-      ||
-      elements.enhancementModal.hidden
+      || elements.enhancementModal.hidden
     ) {
       return;
     }
@@ -3236,12 +5237,49 @@
       null;
 
 
+    enhancementSession.cropQuad =
+      null;
+
+
+    enhancementSession.savedCropQuad =
+      null;
+
+
+    enhancementSession.cropEditing =
+      false;
+
+
     enhancementSession.returnFocus =
       null;
 
 
+    if (
+      elements.enhancementCropPanel
+    ) {
+      elements.enhancementCropPanel.hidden =
+        true;
+    }
+
+
+    if (
+      elements.enhancementCompare
+    ) {
+      elements.enhancementCompare.hidden =
+        false;
+    }
+
+
+    if (
+      elements.enhancementPresets
+    ) {
+      elements.enhancementPresets.hidden =
+        false;
+    }
+
+
     focusTarget?.focus?.();
   }
+
 
 
   function rerenderImageToolForItems(
@@ -3281,12 +5319,263 @@
           () => {
             enhancementSession.mode =
               button.dataset.enhancement
-              ||
-              "original";
+              || "original";
 
 
             renderEnhancementPreview();
           }
+        );
+      }
+    );
+
+
+    elements.enhancementCropOpen?.addEventListener(
+      "click",
+      openCropEditor
+    );
+
+
+    elements.enhancementCropReset?.addEventListener(
+      "click",
+      () => {
+        setEnhancementCropQuad(
+          FULL_CROP_QUAD
+        );
+
+
+        elements.enhancementStatus.textContent =
+          "Crop reset to the full image.";
+      }
+    );
+
+
+    elements.enhancementCropCancel?.addEventListener(
+      "click",
+      () =>
+        closeCropEditor(
+          false
+        )
+    );
+
+
+    elements.enhancementCropDone?.addEventListener(
+      "click",
+      () =>
+        closeCropEditor(
+          true
+        )
+    );
+
+
+    elements.enhancementCropAuto?.addEventListener(
+      "click",
+      async () => {
+        const item =
+          enhancementSession.item;
+
+
+        if (
+          !item
+        ) {
+          return;
+        }
+
+
+        const button =
+          elements.enhancementCropAuto;
+
+
+        const originalText =
+          button.textContent;
+
+
+        button.disabled =
+          true;
+
+
+        button.textContent =
+          "Detecting…";
+
+
+        elements.enhancementStatus.textContent =
+          "Looking for the largest document outline locally…";
+
+
+        try {
+          const detected =
+            await detectDocumentCropQuad(
+              item.file
+            );
+
+
+          if (
+            !detected
+          ) {
+            elements.enhancementStatus.textContent =
+              "No clear four-corner page was detected. Drag the handles manually instead.";
+
+
+            return;
+          }
+
+
+          setEnhancementCropQuad(
+            detected
+          );
+
+
+          elements.enhancementStatus.textContent =
+            "Page edges detected. Adjust any corner if needed, then use this crop.";
+        }
+        catch (error) {
+          console.warn(
+            "MazeDocs auto crop:",
+            error
+          );
+
+
+          elements.enhancementStatus.textContent =
+            "Auto edges are unavailable right now. Manual four-corner crop still works.";
+        }
+        finally {
+          button.disabled =
+            false;
+
+
+          button.textContent =
+            originalText;
+        }
+      }
+    );
+
+
+    elements.enhancementCropHandles.forEach(
+      (handle) => {
+        const cornerIndex =
+          Number(
+            handle.dataset.cropCorner
+          );
+
+
+        let pointerId =
+          null;
+
+
+        const moveCorner =
+          (event) => {
+            if (
+              pointerId === null
+              || event.pointerId !== pointerId
+              || !elements.enhancementCropStage
+            ) {
+              return;
+            }
+
+
+            const rect =
+              elements.enhancementCropStage.getBoundingClientRect();
+
+
+            if (
+              !rect.width
+              || !rect.height
+            ) {
+              return;
+            }
+
+
+            const point =
+              constrainCropPoint(
+                cornerIndex,
+                (
+                  event.clientX
+                  - rect.left
+                ) / rect.width,
+                (
+                  event.clientY
+                  - rect.top
+                ) / rect.height
+              );
+
+
+            const quad =
+              cloneCropQuad(
+                enhancementSession.cropQuad
+              );
+
+
+            quad[cornerIndex] =
+              point;
+
+
+            enhancementSession.cropQuad =
+              quad;
+
+
+            renderCropOverlay();
+          };
+
+
+        const finishDrag =
+          (event) => {
+            if (
+              pointerId === null
+              || event.pointerId !== pointerId
+            ) {
+              return;
+            }
+
+
+            try {
+              handle.releasePointerCapture?.(
+                pointerId
+              );
+            }
+            catch (error) {
+              /* Pointer may already have been released. */
+            }
+
+
+            pointerId =
+              null;
+          };
+
+
+        handle.addEventListener(
+          "pointerdown",
+          (event) => {
+            event.preventDefault();
+
+
+            pointerId =
+              event.pointerId;
+
+
+            handle.setPointerCapture?.(
+              pointerId
+            );
+
+
+            moveCorner(event);
+          }
+        );
+
+
+        handle.addEventListener(
+          "pointermove",
+          moveCorner
+        );
+
+
+        handle.addEventListener(
+          "pointerup",
+          finishDrag
+        );
+
+
+        handle.addEventListener(
+          "pointercancel",
+          finishDrag
         );
       }
     );
@@ -3305,8 +5594,7 @@
 
         if (
           !item
-          ||
-          !items
+          || !items
         ) {
           return;
         }
@@ -3314,8 +5602,19 @@
 
         item.enhancement =
           enhancementSession.mode
-          ||
-          "original";
+          || "original";
+
+
+        const cropQuad =
+          cloneCropQuad(
+            enhancementSession.cropQuad
+          );
+
+
+        item.cropQuad =
+          isFullCropQuad(cropQuad)
+            ? null
+            : cropQuad;
 
 
         rerenderImageToolForItems(
@@ -3323,8 +5622,14 @@
         );
 
 
+        const cropped =
+          Boolean(
+            item.cropQuad
+          );
+
+
         showToast(
-          `${getEnhancementLabel(item.enhancement)} applied to this page.`
+          `${getEnhancementLabel(item.enhancement)}${cropped ? " + crop" : ""} applied to this page.`
         );
 
 
@@ -3340,6 +5645,10 @@
           enhancementSession.items;
 
 
+        const currentItem =
+          enhancementSession.item;
+
+
         if (
           !items?.length
         ) {
@@ -3349,8 +5658,7 @@
 
         const mode =
           enhancementSession.mode
-          ||
-          "original";
+          || "original";
 
 
         items.forEach(
@@ -3361,13 +5669,29 @@
         );
 
 
+        if (
+          currentItem
+        ) {
+          const cropQuad =
+            cloneCropQuad(
+              enhancementSession.cropQuad
+            );
+
+
+          currentItem.cropQuad =
+            isFullCropQuad(cropQuad)
+              ? null
+              : cropQuad;
+        }
+
+
         rerenderImageToolForItems(
           items
         );
 
 
         showToast(
-          `${getEnhancementLabel(mode)} applied to all pages.`
+          `${getEnhancementLabel(mode)} applied to all pages${currentItem?.cropQuad ? "; crop kept on this page" : ""}.`
         );
 
 
@@ -3399,16 +5723,30 @@
       "keydown",
       (event) => {
         if (
-          event.key ===
-          "Escape"
-          &&
-          !elements.enhancementModal.hidden
+          event.key !== "Escape"
+          || elements.enhancementModal.hidden
         ) {
-          closeEnhancementModal();
+          return;
         }
+
+
+        if (
+          enhancementSession.cropEditing
+        ) {
+          closeCropEditor(
+            false
+          );
+
+
+          return;
+        }
+
+
+        closeEnhancementModal();
       }
     );
   }
+
 
 
   async function normalizeImageForPdf(
@@ -3429,7 +5767,8 @@
       await renderImageWithEnhancement(
         item.file,
         enhancement,
-        2600
+        2600,
+        item.cropQuad
       );
 
 
@@ -3498,7 +5837,10 @@
             ),
 
           enhancement:
-            "original"
+            "original",
+
+          cropQuad:
+            null
         });
       }
     );
@@ -3542,16 +5884,34 @@
       "original";
 
 
+    const cropped =
+      Boolean(
+        item.cropQuad
+        && !isFullCropQuad(item.cropQuad)
+      );
+
+
+    const cardStatus =
+      [
+        mode === "original"
+          ? "Original color"
+          : getEnhancementLabel(mode),
+        cropped
+          ? "Perspective crop"
+          : "Full page"
+      ].join(" · ");
+
+
     card.innerHTML = `
       <div class="image-card__preview">
         <img alt="" />
-        <span class="image-card__preset">${getEnhancementLabel(mode)}</span>
+        <span class="image-card__preset">${getEnhancementLabel(mode)}${cropped ? " · CROP" : ""}</span>
       </div>
 
       <div class="image-card__footer">
         <div class="image-card__meta">
           <span></span>
-          <small>${mode === "original" ? "No enhancement" : "Enhancement ready for export"}</small>
+          <small>${cardStatus}</small>
         </div>
 
         <div class="image-card__controls">
@@ -3667,7 +6027,7 @@
 
 
         elements.processingDetail.textContent =
-          `Page ${index + 1} of ${items.length} · ${getEnhancementLabel(enhancement)}.`;
+          `Page ${index + 1} of ${items.length} · ${getEnhancementLabel(enhancement)}${item.cropQuad ? " · straightening crop" : ""}.`;
 
 
         const imageData =
