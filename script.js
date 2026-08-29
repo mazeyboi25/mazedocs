@@ -7044,16 +7044,34 @@
 
 
     window.Sortable.create(
-      element,
-      {
-        animation:
-          170,
+  element,
+  {
+    animation: 170,
 
-        ghostClass:
-          "sortable-ghost",
+    ghostClass:
+      "sortable-ghost",
 
-        onEnd:
-          () => {
+    /*
+     * Do not let mobile dragging steal taps
+     * from Enhance / Remove buttons.
+     */
+    filter:
+      "button, .image-card__controls, .image-enhance, .file-remove",
+
+    preventOnFilter:
+      false,
+
+    delay:
+      120,
+
+    delayOnTouchOnly:
+      true,
+
+    touchStartThreshold:
+      6,
+
+    onEnd:
+      () => {
 
             const ids =
               [

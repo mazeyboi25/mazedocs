@@ -4375,3 +4375,60 @@ body.enhancement-open {
     height: auto;
   }
 }
+
+/* =========================================================
+   MOBILE ENHANCE BUTTON — larger + easier to tap
+   ========================================================= */
+
+.image-enhance {
+  position: relative;
+  z-index: 5;
+
+  min-width: 92px;
+  min-height: 42px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  touch-action: manipulation;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 560px) {
+  .image-card__controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 48px;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .image-enhance {
+    width: 100%;
+    min-height: 52px;
+    padding: 0 16px;
+
+    font-size: 9px;
+
+    border-radius: 11px;
+
+    /* larger invisible touch area */
+    isolation: isolate;
+  }
+
+  .image-enhance::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    z-index: -1;
+  }
+
+  .image-card__controls .file-remove {
+    width: 48px;
+    height: 52px;
+    min-width: 48px;
+    min-height: 52px;
+  }
+}
