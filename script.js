@@ -4412,64 +4412,6 @@
   }
 
 
-  async function checkApi() {
-    try {
-      const response =
-        await fetch(
-          `${API_BASE}/api`,
-          {
-            cache:
-              "no-store"
-          }
-        );
-
-
-      const contentType =
-        response.headers.get(
-          "content-type"
-        )
-        ||
-        "";
-
-
-      if (
-        !response.ok
-        ||
-        !contentType.includes(
-          "application/json"
-        )
-      ) {
-        throw new Error(
-          "MazeDocs API did not return JSON."
-        );
-      }
-
-
-      const data =
-        await response.json();
-
-
-      setEngineStatus(
-        true,
-        Boolean(
-          data.libreoffice_available
-        )
-      );
-    }
-    catch (error) {
-      console.error(
-        error
-      );
-
-
-      setEngineStatus(
-        false,
-        false
-      );
-    }
-  }
-
-
   /* ==========================================================
      07. TARGET PICKER
      ========================================================== */
