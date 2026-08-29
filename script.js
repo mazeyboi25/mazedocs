@@ -3328,6 +3328,361 @@
   }
 
 
+  function smoothStep(value) {
+    const t = Math.max(0, Math.min(1, value));
+    return t * t * (3 - 2 * t);
+  }
+
+
+  function applyAdaptiveLocalLevels(
+    imageData,
+    {
+      tilesX = 8,
+      tilesY = 8,
+      amount = 0.25
+    } = {}
+  ) {
+    const width = imageData.width;
+    const height = imageData.height;
+    const pixels = imageData.data;
+
+    if (
+      !width
+      || !height
+      || amount <= 0
+    ) {
+      return;
+    }
+
+    const tileWidth = Math.ceil(width / tilesX);
+    const tileHeight = Math.ceil(height / tilesY);
+    const stats = [];
+
+    for (let tileY = 0; tileY < tilesY; tileY += 1) {
+      stats[tileY] = [];
+
+      for (let tileX = 0; tileX < tilesX; tileX += 1) {
+        const histogram = new Uint32Array(256);
+        const startX = tileX * tileWidth;
+        const startY = tileY * tileHeight;
+        const endX = Math.min(width, startX + tileWidth);
+        const endY = Math.min(height, startY + tileHeight);
+        const sampleStep = Math.max(
+          1,
+          Math.floor(
+            Math.max(tileWidth, tileHeight) / 150
+          )
+        );
+
+        let samples = 0;
+
+        for (let y = startY; y < endY; y += sampleStep) {
+          for (let x = startX; x < endX; x += sampleStep) {
+            const index = (y * width + x) * 4;
+
+            if (pixels[index + 3] < 8) {
+              continue;
+            }
+
+            const gray = Math.round(
+              luminance(
+                pixels[index],
+                pixels[index + 1],
+                pixels[index + 2]
+              )
+            );
+
+            histogram[gray] += 1;
+            samples += 1;
+          }
+        }
+
+        const findPercentile = (fraction) => {
+          if (!samples) return fraction < .5 ? 0 : 255;
+
+          const target = samples * fraction;
+          let cumulative = 0;
+
+          for (let value = 0; value < 256; value += 1) {
+            cumulative += histogram[value];
+            if (cumulative >= target) return value;
+          }
+
+          return 255;
+        };
+
+        let low = findPercentile(.025);
+        let high = findPercentile(.985);
+
+        if (high - low < 58) {
+          const midpoint = (high + low) / 2;
+          low = Math.max(0, midpoint - 29);
+          high = Math.min(255, midpoint + 29);
+        }
+
+        stats[tileY][tileX] = { low, high };
+      }
+    }
+
+    const readStat = (x, y) =>
+      stats[
+        Math.max(0, Math.min(tilesY - 1, y))
+      ][
+        Math.max(0, Math.min(tilesX - 1, x))
+      ];
+
+    for (let y = 0; y < height; y += 1) {
+      const tileY = y / tileHeight - .5;
+      const y0 = Math.floor(tileY);
+      const y1 = y0 + 1;
+      const fy = tileY - y0;
+
+      for (let x = 0; x < width; x += 1) {
+        const index = (y * width + x) * 4;
+
+        if (pixels[index + 3] === 0) {
+          continue;
+        }
+
+        const tileX = x / tileWidth - .5;
+        const x0 = Math.floor(tileX);
+        const x1 = x0 + 1;
+        const fx = tileX - x0;
+
+        const s00 = readStat(x0, y0);
+        const s10 = readStat(x1, y0);
+        const s01 = readStat(x0, y1);
+        const s11 = readStat(x1, y1);
+
+        const lowTop = s00.low + (s10.low - s00.low) * fx;
+        const lowBottom = s01.low + (s11.low - s01.low) * fx;
+        const highTop = s00.high + (s10.high - s00.high) * fx;
+        const highBottom = s01.high + (s11.high - s01.high) * fx;
+
+        const localLow = lowTop + (lowBottom - lowTop) * fy;
+        const localHigh = highTop + (highBottom - highTop) * fy;
+        const localRange = Math.max(42, localHigh - localLow);
+
+        const currentLum = Math.max(
+          1,
+          luminance(
+            pixels[index],
+            pixels[index + 1],
+            pixels[index + 2]
+          )
+        );
+
+        const mappedLum = clampChannel(
+          ((currentLum - localLow) / localRange) * 255
+        );
+
+        const targetLum =
+          currentLum +
+          (mappedLum - currentLum) * amount;
+
+        const ratio = targetLum / currentLum;
+
+        pixels[index] = clampChannel(pixels[index] * ratio);
+        pixels[index + 1] = clampChannel(pixels[index + 1] * ratio);
+        pixels[index + 2] = clampChannel(pixels[index + 2] * ratio);
+      }
+    }
+  }
+
+
+  function applyPaperAndInkCleanup(
+    imageData,
+    {
+      paperStrength = 0.65,
+      inkStrength = 0.12,
+      neutralizeStrength = 0.55,
+      preserveColor = 0.8
+    } = {}
+  ) {
+    const pixels = imageData.data;
+
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index + 3] === 0) {
+        continue;
+      }
+
+      let red = pixels[index];
+      let green = pixels[index + 1];
+      let blue = pixels[index + 2];
+
+      const gray = luminance(red, green, blue);
+      const maximum = Math.max(red, green, blue);
+      const minimum = Math.min(red, green, blue);
+      const chroma = maximum - minimum;
+
+      const neutralWeight =
+        1 - Math.min(1, chroma / 48);
+
+      const paperMask =
+        smoothStep((gray - 148) / 94)
+        * (
+          neutralWeight
+          + (1 - neutralWeight) * (1 - preserveColor) * .38
+        );
+
+      if (paperMask > 0) {
+        const whiten = paperMask * paperStrength;
+
+        red += (255 - red) * whiten;
+        green += (255 - green) * whiten;
+        blue += (255 - blue) * whiten;
+
+        const postGray = luminance(red, green, blue);
+        const neutralize =
+          paperMask
+          * neutralWeight
+          * neutralizeStrength;
+
+        red += (postGray - red) * neutralize;
+        green += (postGray - green) * neutralize;
+        blue += (postGray - blue) * neutralize;
+      }
+
+      if (gray < 172) {
+        const inkMask =
+          smoothStep((172 - gray) / 132)
+          * inkStrength;
+
+        red *= 1 - inkMask;
+        green *= 1 - inkMask;
+        blue *= 1 - inkMask;
+      }
+
+      pixels[index] = clampChannel(red);
+      pixels[index + 1] = clampChannel(green);
+      pixels[index + 2] = clampChannel(blue);
+    }
+  }
+
+
+  function applyDocumentPipeline(
+    canvas,
+    {
+      lighting = 0.85,
+      balance = 0.25,
+      localContrast = 0.2,
+      paper = 0.55,
+      ink = 0.1,
+      neutralize = 0.45,
+      preserveColor = 0.8,
+      saturation = 1,
+      contrast = 1.05,
+      brightness = 2,
+      sharpen = 0.25,
+      grayscale = false
+    } = {}
+  ) {
+    const context = canvas.getContext(
+      "2d",
+      {
+        alpha: true,
+        willReadFrequently: true
+      }
+    );
+
+    let imageData = context.getImageData(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    const illumination = createBlurredBackground(
+      canvas,
+      Math.max(
+        18,
+        Math.round(
+          Math.min(canvas.width, canvas.height) * .045
+        )
+      )
+    );
+
+    normalizePageLighting(
+      imageData,
+      illumination,
+      lighting
+    );
+
+    if (balance > 0) {
+      applyGrayWorldBalance(
+        imageData,
+        balance
+      );
+    }
+
+    if (grayscale) {
+      applyGrayscale(imageData);
+    }
+
+    if (localContrast > 0) {
+      applyAdaptiveLocalLevels(
+        imageData,
+        {
+          tilesX: canvas.width > canvas.height ? 10 : 8,
+          tilesY: canvas.height > canvas.width ? 10 : 8,
+          amount: localContrast
+        }
+      );
+    }
+
+    applyAutoTone(
+      imageData,
+      {
+        saturation: grayscale ? 1 : saturation,
+        contrast,
+        brightness
+      }
+    );
+
+    applyPaperAndInkCleanup(
+      imageData,
+      {
+        paperStrength: paper,
+        inkStrength: ink,
+        neutralizeStrength: neutralize,
+        preserveColor
+      }
+    );
+
+    context.putImageData(
+      imageData,
+      0,
+      0
+    );
+
+    if (sharpen > 0) {
+      const blurred = createBlurredBackground(
+        canvas,
+        .85
+      );
+
+      imageData = context.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      applyUnsharpMask(
+        imageData,
+        blurred,
+        sharpen
+      );
+
+      context.putImageData(
+        imageData,
+        0,
+        0
+      );
+    }
+  }
+
+
   async function applyEnhancementPreset(
     canvas,
     mode
@@ -3339,23 +3694,31 @@
       return;
     }
 
+    if (mode === "denoise") {
+      applySoftDenoise(canvas);
 
-    const handledByOpenCv =
-      await applyOpenCvEnhancement(
+      applyDocumentPipeline(
         canvas,
-        mode
+        {
+          lighting: .45,
+          balance: .12,
+          localContrast: .08,
+          paper: .22,
+          ink: .04,
+          neutralize: .18,
+          preserveColor: .92,
+          saturation: 1.01,
+          contrast: 1.025,
+          brightness: 1,
+          sharpen: .16
+        }
       );
 
-
-    if (
-      handledByOpenCv
-    ) {
       return;
     }
 
-
-    const context =
-      canvas.getContext(
+    if (mode === "bw") {
+      const context = canvas.getContext(
         "2d",
         {
           alpha: true,
@@ -3363,282 +3726,183 @@
         }
       );
 
-
-    if (
-      mode === "denoise"
-    ) {
-      applySoftDenoise(
-        canvas
-      );
-
-
-      return;
-    }
-
-
-    let imageData =
-      context.getImageData(
+      let imageData = context.getImageData(
         0,
         0,
         canvas.width,
         canvas.height
       );
 
-
-    if (
-      mode === "auto"
-    ) {
-      const backgroundData =
-        createBlurredBackground(
-          canvas,
-          Math.max(
-            14,
-            Math.round(
-              Math.min(
-                canvas.width,
-                canvas.height
-              ) * 0.026
-            )
+      const illumination = createBlurredBackground(
+        canvas,
+        Math.max(
+          20,
+          Math.round(
+            Math.min(canvas.width, canvas.height) * .05
           )
-        );
-
+        )
+      );
 
       normalizePageLighting(
         imageData,
-        backgroundData,
-        0.38
+        illumination,
+        1
       );
 
+      applyGrayscale(imageData);
 
-      applyGrayWorldBalance(
-        imageData,
-        0.24
-      );
-
-
-      applyAutoTone(
+      applyAdaptiveLocalLevels(
         imageData,
         {
-          saturation: 1.035,
-          contrast: 1.08,
-          brightness: 3
+          tilesX: 8,
+          tilesY: 10,
+          amount: .2
         }
       );
-
-
-      liftPaperWhites(
-        imageData,
-        186,
-        0.28
-      );
-    }
-
-
-    if (
-      mode === "photo"
-    ) {
-      applyGrayWorldBalance(
-        imageData,
-        0.18
-      );
-
-
-      applyAutoTone(
-        imageData,
-        {
-          saturation: 1.09,
-          contrast: 1.045,
-          brightness: 1
-        }
-      );
-    }
-
-
-    if (
-      mode === "vivid"
-    ) {
-      applyGrayWorldBalance(
-        imageData,
-        0.3
-      );
-
-
-      applyAutoTone(
-        imageData,
-        {
-          saturation: 1.25,
-          contrast: 1.12,
-          brightness: 2
-        }
-      );
-    }
-
-
-    if (
-      mode === "grayscale"
-    ) {
-      applyAutoTone(
-        imageData,
-        {
-          saturation: 1,
-          contrast: 1.095,
-          brightness: 2
-        }
-      );
-
-
-      applyGrayscale(
-        imageData
-      );
-    }
-
-
-    if (
-      mode === "shadow"
-      || mode === "document"
-      || mode === "bw"
-    ) {
-      const backgroundData =
-        createBlurredBackground(
-          canvas,
-          Math.max(
-            18,
-            Math.round(
-              Math.min(
-                canvas.width,
-                canvas.height
-              ) * 0.038
-            )
-          )
-        );
-
-
-      if (
-        mode === "bw"
-      ) {
-        applyBlackAndWhite(
-          imageData,
-          backgroundData
-        );
-      }
-      else {
-        normalizePageLighting(
-          imageData,
-          backgroundData,
-          mode === "document"
-            ? 0.96
-            : 0.86
-        );
-
-
-        applyGrayWorldBalance(
-          imageData,
-          mode === "document"
-            ? 0.38
-            : 0.28
-        );
-
-
-        applyAutoTone(
-          imageData,
-          mode === "document"
-            ? {
-                saturation: 0.94,
-                contrast: 1.16,
-                brightness: 7
-              }
-            : {
-                saturation: 1.015,
-                contrast: 1.08,
-                brightness: 4
-              }
-        );
-
-
-        liftPaperWhites(
-          imageData,
-          mode === "document"
-            ? 166
-            : 182,
-          mode === "document"
-            ? 0.78
-            : 0.42
-        );
-      }
-    }
-
-
-    if (
-      mode === "sharpen"
-    ) {
-      applyAutoTone(
-        imageData,
-        {
-          saturation: 1,
-          contrast: 1.1,
-          brightness: 1
-        }
-      );
-    }
-
-
-    context.putImageData(
-      imageData,
-      0,
-      0
-    );
-
-
-    if (
-      [
-        "auto",
-        "document",
-        "vivid",
-        "photo",
-        "sharpen"
-      ].includes(mode)
-    ) {
-      const amount =
-        mode === "sharpen"
-          ? 0.82
-          : mode === "document"
-            ? 0.48
-            : mode === "vivid"
-              ? 0.34
-              : 0.24;
-
-
-      const blurredData =
-        createBlurredBackground(
-          canvas,
-          mode === "sharpen"
-            ? 1.05
-            : 0.85
-        );
-
-
-      imageData =
-        context.getImageData(
-          0,
-          0,
-          canvas.width,
-          canvas.height
-        );
-
-
-      applyUnsharpMask(
-        imageData,
-        blurredData,
-        amount
-      );
-
 
       context.putImageData(
         imageData,
         0,
         0
       );
+
+      const thresholdBackground = createBlurredBackground(
+        canvas,
+        Math.max(
+          14,
+          Math.round(
+            Math.min(canvas.width, canvas.height) * .025
+          )
+        )
+      );
+
+      imageData = context.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      applyBlackAndWhite(
+        imageData,
+        thresholdBackground
+      );
+
+      context.putImageData(
+        imageData,
+        0,
+        0
+      );
+
+      return;
     }
+
+    const settings = {
+      auto: {
+        lighting: .78,
+        balance: .22,
+        localContrast: .18,
+        paper: .52,
+        ink: .08,
+        neutralize: .42,
+        preserveColor: .88,
+        saturation: 1.015,
+        contrast: 1.045,
+        brightness: 2,
+        sharpen: .24
+      },
+
+      document: {
+        lighting: 1,
+        balance: .38,
+        localContrast: .3,
+        paper: .96,
+        ink: .2,
+        neutralize: .92,
+        preserveColor: .76,
+        saturation: .9,
+        contrast: 1.075,
+        brightness: 4,
+        sharpen: .38
+      },
+
+      vivid: {
+        lighting: .72,
+        balance: .25,
+        localContrast: .2,
+        paper: .4,
+        ink: .08,
+        neutralize: .26,
+        preserveColor: .96,
+        saturation: 1.15,
+        contrast: 1.055,
+        brightness: 2,
+        sharpen: .25
+      },
+
+      grayscale: {
+        lighting: .96,
+        balance: 0,
+        localContrast: .3,
+        paper: .78,
+        ink: .16,
+        neutralize: .8,
+        preserveColor: 0,
+        saturation: 1,
+        contrast: 1.065,
+        brightness: 3,
+        sharpen: .32,
+        grayscale: true
+      },
+
+      shadow: {
+        lighting: 1,
+        balance: .26,
+        localContrast: .12,
+        paper: .66,
+        ink: .08,
+        neutralize: .52,
+        preserveColor: .9,
+        saturation: 1,
+        contrast: 1.035,
+        brightness: 3,
+        sharpen: .18
+      },
+
+      sharpen: {
+        lighting: .58,
+        balance: .12,
+        localContrast: .24,
+        paper: .42,
+        ink: .18,
+        neutralize: .34,
+        preserveColor: .9,
+        saturation: 1,
+        contrast: 1.06,
+        brightness: 1,
+        sharpen: .58
+      },
+
+      photo: {
+        lighting: .35,
+        balance: .16,
+        localContrast: .1,
+        paper: .08,
+        ink: 0,
+        neutralize: .05,
+        preserveColor: 1,
+        saturation: 1.06,
+        contrast: 1.035,
+        brightness: 1,
+        sharpen: .18
+      }
+    };
+
+    applyDocumentPipeline(
+      canvas,
+      settings[mode]
+      || settings.auto
+    );
   }
 
 
@@ -4385,13 +4649,16 @@
   async function canvasToObjectUrl(
     canvas
   ) {
+    /*
+     * PNG keeps small text and document edges crisp in the comparison preview.
+     * The object URL avoids a large base64 string in memory.
+     */
     const blob =
       await new Promise(
         (resolve) => {
           canvas.toBlob(
             resolve,
-            "image/jpeg",
-            0.9
+            "image/png"
           );
         }
       );
@@ -4401,8 +4668,7 @@
       !blob
     ) {
       return canvas.toDataURL(
-        "image/jpeg",
-        0.9
+        "image/png"
       );
     }
 
@@ -5939,6 +6205,14 @@
       "original";
 
 
+    const exportDimension =
+      window.matchMedia(
+        "(max-width: 720px)"
+      ).matches
+        ? 2400
+        : 3000;
+
+
     const {
       canvas,
       width,
@@ -5947,24 +6221,31 @@
       await renderImageWithEnhancement(
         item.file,
         enhancement,
-        2600,
+        exportDimension,
         item.cropQuad
       );
 
 
-    const pngDataUrl =
-      canvas.toDataURL(
-        "image/png"
+    const pngBlob =
+      await new Promise(
+        (resolve) => {
+          canvas.toBlob(
+            resolve,
+            "image/png"
+          );
+        }
       );
+
+
+    if (!pngBlob) {
+      throw new Error(
+        "Could not prepare the enhanced page for PDF export."
+      );
+    }
 
 
     const pngBytes =
-      await fetch(
-        pngDataUrl
-      ).then(
-        (response) =>
-          response.arrayBuffer()
-      );
+      await pngBlob.arrayBuffer();
 
 
     const embedded =
