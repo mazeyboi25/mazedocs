@@ -1742,6 +1742,42 @@
   let openCvPromise = null;
 
 
+  /*
+   * Enhancement previews are intentionally serialized.
+   * Rapid preset clicks must never start several large canvas jobs at once.
+   */
+  let enhancementPreviewTimer = 0;
+  let enhancementPreviewRunning = false;
+  let enhancementPreviewPending = false;
+
+
+  function scheduleEnhancementPreview(delay = 70) {
+    window.clearTimeout(enhancementPreviewTimer);
+
+    enhancementPreviewTimer = window.setTimeout(
+      async () => {
+        enhancementPreviewTimer = 0;
+
+        if (enhancementPreviewRunning) {
+          enhancementPreviewPending = true;
+          return;
+        }
+
+        enhancementPreviewRunning = true;
+
+        try {
+          do {
+            enhancementPreviewPending = false;
+            await renderEnhancementPreview();
+          } while (enhancementPreviewPending);
+        }
+        finally {
+          enhancementPreviewRunning = false;
+        }
+      },
+      delay
+    );
+  }
 
 
   function clampChannel(value) {
@@ -2022,40 +2058,51 @@
   }
 
 
-  function warmAdvancedScanEngine() {
-    loadOpenCv().catch(
-      () => {
-        /* Canvas fallbacks remain available offline. */
-      }
-    );
-  }
-
-
   async function loadImageElement(file) {
-    const dataUrl =
-      await fileToDataUrl(
+    const objectUrl =
+      URL.createObjectURL(
         file
       );
 
 
-    return await new Promise(
-      (resolve, reject) => {
-        const image =
-          new Image();
+    try {
+      return await new Promise(
+        (resolve, reject) => {
+          const image =
+            new Image();
 
 
-        image.onload =
-          () => resolve(image);
+          image.decoding =
+            "async";
 
 
-        image.onerror =
-          reject;
+          image.onload =
+            () => resolve(image);
 
 
-        image.src =
-          dataUrl;
-      }
-    );
+          image.onerror =
+            () => reject(
+              new Error(
+                "Could not decode this image."
+              )
+            );
+
+
+          image.src =
+            objectUrl;
+        }
+      );
+    }
+    finally {
+      /*
+       * The decoded image remains usable after load, so the temporary Blob
+       * URL can be released immediately instead of keeping a second large
+       * representation of the photo alive in memory.
+       */
+      URL.revokeObjectURL(
+        objectUrl
+      );
+    }
   }
 
 
@@ -3265,367 +3312,18 @@
   }
 
 
-  async function getOpenCvForEnhancement() {
-    try {
-      return await Promise.race([
-        loadOpenCv(),
-        new Promise(
-          (_, reject) =>
-            window.setTimeout(
-              () => reject(
-                new Error(
-                  "Advanced scan engine is still loading."
-                )
-              ),
-              4200
-            )
-        )
-      ]);
-    }
-    catch (error) {
-      return null;
-    }
-  }
-
-
   async function applyOpenCvEnhancement(
     canvas,
     mode
   ) {
-    if (
-      ![
-        "grayscale",
-        "bw",
-        "sharpen",
-        "denoise"
-      ].includes(mode)
-    ) {
-      return false;
-    }
-
-
-    const cv =
-      await getOpenCvForEnhancement();
-
-
-    if (
-      !cv
-    ) {
-      return false;
-    }
-
-
-    const mats = [];
-
-
-    try {
-      const src =
-        cv.imread(canvas);
-
-
-      mats.push(src);
-
-
-      if (
-        mode === "bw"
-      ) {
-        const gray =
-          new cv.Mat();
-
-
-        const softened =
-          new cv.Mat();
-
-
-        const thresholded =
-          new cv.Mat();
-
-
-        const rgba =
-          new cv.Mat();
-
-
-        mats.push(
-          gray,
-          softened,
-          thresholded,
-          rgba
-        );
-
-
-        cv.cvtColor(
-          src,
-          gray,
-          cv.COLOR_RGBA2GRAY
-        );
-
-
-        cv.GaussianBlur(
-          gray,
-          softened,
-          new cv.Size(3, 3),
-          0,
-          0,
-          cv.BORDER_DEFAULT
-        );
-
-
-        let blockSize =
-          Math.round(
-            Math.min(
-              canvas.width,
-              canvas.height
-            ) /
-            28
-          );
-
-
-        blockSize =
-          Math.max(
-            21,
-            Math.min(
-              71,
-              blockSize
-            )
-          );
-
-
-        if (
-          blockSize % 2 === 0
-        ) {
-          blockSize += 1;
-        }
-
-
-        cv.adaptiveThreshold(
-          softened,
-          thresholded,
-          255,
-          cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-          cv.THRESH_BINARY,
-          blockSize,
-          12
-        );
-
-
-        cv.medianBlur(
-          thresholded,
-          thresholded,
-          3
-        );
-
-
-        cv.cvtColor(
-          thresholded,
-          rgba,
-          cv.COLOR_GRAY2RGBA
-        );
-
-
-        cv.imshow(
-          canvas,
-          rgba
-        );
-
-
-        return true;
-      }
-
-
-      if (
-        mode === "grayscale"
-      ) {
-        const gray =
-          new cv.Mat();
-
-
-        const contrasted =
-          new cv.Mat();
-
-
-        const rgba =
-          new cv.Mat();
-
-
-        mats.push(
-          gray,
-          contrasted,
-          rgba
-        );
-
-
-        cv.cvtColor(
-          src,
-          gray,
-          cv.COLOR_RGBA2GRAY
-        );
-
-
-        if (
-          typeof cv.createCLAHE === "function"
-        ) {
-          const clahe =
-            cv.createCLAHE(
-              2.15,
-              new cv.Size(8, 8)
-            );
-
-
-          clahe.apply(
-            gray,
-            contrasted
-          );
-
-
-          clahe.delete?.();
-        }
-        else {
-          cv.equalizeHist(
-            gray,
-            contrasted
-          );
-        }
-
-
-        cv.cvtColor(
-          contrasted,
-          rgba,
-          cv.COLOR_GRAY2RGBA
-        );
-
-
-        cv.imshow(
-          canvas,
-          rgba
-        );
-
-
-        return true;
-      }
-
-
-      if (
-        mode === "denoise"
-      ) {
-        const rgb =
-          new cv.Mat();
-
-
-        const filtered =
-          new cv.Mat();
-
-
-        const rgba =
-          new cv.Mat();
-
-
-        mats.push(
-          rgb,
-          filtered,
-          rgba
-        );
-
-
-        cv.cvtColor(
-          src,
-          rgb,
-          cv.COLOR_RGBA2RGB
-        );
-
-
-        cv.bilateralFilter(
-          rgb,
-          filtered,
-          7,
-          42,
-          42,
-          cv.BORDER_DEFAULT
-        );
-
-
-        cv.cvtColor(
-          filtered,
-          rgba,
-          cv.COLOR_RGB2RGBA
-        );
-
-
-        cv.imshow(
-          canvas,
-          rgba
-        );
-
-
-        return true;
-      }
-
-
-      if (
-        mode === "sharpen"
-      ) {
-        const blurred =
-          new cv.Mat();
-
-
-        const sharpened =
-          new cv.Mat();
-
-
-        mats.push(
-          blurred,
-          sharpened
-        );
-
-
-        cv.GaussianBlur(
-          src,
-          blurred,
-          new cv.Size(5, 5),
-          1.05,
-          1.05,
-          cv.BORDER_DEFAULT
-        );
-
-
-        cv.addWeighted(
-          src,
-          1.72,
-          blurred,
-          -0.72,
-          0,
-          sharpened
-        );
-
-
-        cv.imshow(
-          canvas,
-          sharpened
-        );
-
-
-        return true;
-      }
-    }
-    catch (error) {
-      console.warn(
-        "MazeDocs advanced enhancement fallback:",
-        error
-      );
-    }
-    finally {
-      mats.forEach(
-        (mat) => {
-          try {
-            mat?.delete?.();
-          }
-          catch (error) {
-            /* Ignore cleanup errors from partially constructed Mats. */
-          }
-        }
-      );
-    }
-
-
+    /*
+     * Normal enhancement previews intentionally stay on the Canvas path.
+     * Loading OpenCV here can allocate a large WebAssembly heap and freeze
+     * lower-memory laptops/phones. OpenCV is loaded only by explicit crop
+     * features such as Auto edges / perspective correction.
+     */
+    void canvas;
+    void mode;
     return false;
   }
 
@@ -4479,8 +4177,8 @@
         window.matchMedia(
           "(max-width: 720px)"
         ).matches
-          ? 760
-          : 1200;
+          ? 620
+          : 900;
 
 
       const {
@@ -4825,8 +4523,6 @@
     elements.enhancementStatus.textContent =
       "Drag the four handles to the document corners. Use Auto edges as a starting point if you want.";
 
-
-    warmAdvancedScanEngine();
   }
 
 
@@ -4872,7 +4568,7 @@
 
 
     renderCropOverlay();
-    renderEnhancementPreview();
+    scheduleEnhancementPreview(40);
   }
 
 
@@ -5181,16 +4877,13 @@
 
 
     renderCropOverlay();
-    renderEnhancementPreview();
+    scheduleEnhancementPreview(0);
 
 
     /*
-     * Load the heavier computer-vision engine only when the enhancer is
-     * actually opened. Normal MazeDocs page load remains unchanged.
+     * Do not start OpenCV/WASM here. The heavy engine is loaded only when
+     * the user explicitly requests Auto edges or a perspective operation.
      */
-    warmAdvancedScanEngine();
-
-
     window.setTimeout(
       () => {
         elements.enhancementClose?.focus();
@@ -5211,6 +4904,15 @@
 
     enhancementSession.requestId +=
       1;
+
+
+    window.clearTimeout(
+      enhancementPreviewTimer
+    );
+
+
+    enhancementPreviewTimer = 0;
+    enhancementPreviewPending = false;
 
 
     releaseEnhancementPreview();
@@ -5322,7 +5024,7 @@
               || "original";
 
 
-            renderEnhancementPreview();
+            scheduleEnhancementPreview();
           }
         );
       }
