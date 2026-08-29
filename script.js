@@ -440,11 +440,44 @@
     scanActions:
       $("#scan-actions"),
 
-    scanGrayscale:
-      $("#scan-grayscale"),
+    scanCount:
+      $("#scan-count"),
 
     scanBuildButton:
       $("#scan-build-button"),
+
+
+    /* Image enhancement preview */
+
+    enhancementModal:
+      $("#enhancement-modal"),
+
+    enhancementClose:
+      $("#enhancement-close"),
+
+    enhancementOriginal:
+      $("#enhancement-original"),
+
+    enhancementPreview:
+      $("#enhancement-preview"),
+
+    enhancementPreviewLabel:
+      $("#enhancement-preview-label"),
+
+    enhancementRendering:
+      $("#enhancement-rendering"),
+
+    enhancementStatus:
+      $("#enhancement-status"),
+
+    enhancementPresetButtons:
+      $$("[data-enhancement]"),
+
+    enhancementApplyAll:
+      $("#enhancement-apply-all"),
+
+    enhancementApplyPage:
+      $("#enhancement-apply-page"),
 
 
     /* OCR */
@@ -1597,167 +1630,707 @@
      11. IMAGE HELPERS
      ========================================================== */
 
-  async function normalizeImageForPdf(
-  pdfDocument,
-  file,
-  grayscale = false
-) {
+  const IMAGE_ENHANCEMENT_PRESETS = {
+    original: {
+      label: "Original"
+    },
 
-  const dataUrl =
-    await fileToDataUrl(
-      file
-    );
+    auto: {
+      label: "Auto"
+    },
 
+    document: {
+      label: "Document"
+    },
 
-  const image =
-    await new Promise(
-      (resolve, reject) => {
+    vivid: {
+      label: "Vivid Color"
+    },
 
-        const element =
-          new Image();
+    grayscale: {
+      label: "Grayscale"
+    },
 
+    bw: {
+      label: "B&W"
+    },
 
-        element.onload =
-          () => resolve(element);
+    shadow: {
+      label: "Shadow Fix"
+    },
 
+    sharpen: {
+      label: "Sharp Text"
+    },
 
-        element.onerror =
-          reject;
+    denoise: {
+      label: "Denoise"
+    },
 
-
-        element.src =
-          dataUrl;
-
-      }
-    );
-
-
-  /*
-   * Limit extremely large images so the browser does not
-   * consume unnecessary memory.
-   *
-   * IMPORTANT:
-   * We keep the original aspect ratio.
-   */
-
-  const maximumDimension =
-    2600;
+    photo: {
+      label: "Photo"
+    }
+  };
 
 
-  const resizeScale =
-    Math.min(
-      1,
+  let enhancementSession = {
+    item: null,
+    items: null,
+    mode: "original",
+    previewUrl: "",
+    requestId: 0,
+    returnFocus: null
+  };
 
-      maximumDimension /
-      Math.max(
-        image.naturalWidth,
-        image.naturalHeight
+
+  function clampChannel(value) {
+    return Math.max(
+      0,
+      Math.min(
+        255,
+        value
       )
     );
+  }
 
 
-  const width =
-    Math.max(
-      1,
-
-      Math.round(
-        image.naturalWidth *
-        resizeScale
-      )
+  function getEnhancementLabel(mode) {
+    return (
+      IMAGE_ENHANCEMENT_PRESETS[mode]?.label
+      ||
+      IMAGE_ENHANCEMENT_PRESETS.original.label
     );
+  }
 
 
-  const height =
-    Math.max(
-      1,
-
-      Math.round(
-        image.naturalHeight *
-        resizeScale
-      )
-    );
-
-
-  const canvas =
-    document.createElement(
-      "canvas"
-    );
-
-
-  canvas.width =
-    width;
-
-
-  canvas.height =
-    height;
-
-
-  /*
-   * Keep alpha support enabled.
-   *
-   * DO NOT use:
-   *
-   * { alpha: false }
-   *
-   * because that removes transparency.
-   */
-
-  const context =
-    canvas.getContext(
-      "2d",
-      {
-        alpha: true
-      }
-    );
-
-
-  /*
-   * IMPORTANT:
-   *
-   * Do NOT fill the canvas with white.
-   *
-   * The previous version had:
-   *
-   * context.fillStyle = "#ffffff";
-   * context.fillRect(...);
-   *
-   * That is what permanently created a white background.
-   */
-
-  context.clearRect(
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-
-  context.drawImage(
-    image,
-    0,
-    0,
-    width,
-    height
-  );
-
-
-  /*
-   * Optional grayscale mode.
-   *
-   * Used by the Scan tool.
-   */
-
-  if (grayscale) {
-
-    const imageData =
-      context.getImageData(
-        0,
-        0,
-        canvas.width,
-        canvas.height
+  async function loadImageElement(file) {
+    const dataUrl =
+      await fileToDataUrl(
+        file
       );
 
 
+    return await new Promise(
+      (resolve, reject) => {
+        const image =
+          new Image();
+
+
+        image.onload =
+          () => resolve(image);
+
+
+        image.onerror =
+          reject;
+
+
+        image.src =
+          dataUrl;
+      }
+    );
+  }
+
+
+  function createWorkingCanvas(
+    image,
+    maximumDimension
+  ) {
+    const resizeScale =
+      Math.min(
+        1,
+        maximumDimension /
+        Math.max(
+          image.naturalWidth,
+          image.naturalHeight
+        )
+      );
+
+
+    const width =
+      Math.max(
+        1,
+        Math.round(
+          image.naturalWidth *
+          resizeScale
+        )
+      );
+
+
+    const height =
+      Math.max(
+        1,
+        Math.round(
+          image.naturalHeight *
+          resizeScale
+        )
+      );
+
+
+    const canvas =
+      document.createElement(
+        "canvas"
+      );
+
+
+    canvas.width =
+      width;
+
+
+    canvas.height =
+      height;
+
+
+    const context =
+      canvas.getContext(
+        "2d",
+        {
+          alpha: true,
+          willReadFrequently: true
+        }
+      );
+
+
+    context.clearRect(
+      0,
+      0,
+      width,
+      height
+    );
+
+
+    context.drawImage(
+      image,
+      0,
+      0,
+      width,
+      height
+    );
+
+
+    return {
+      canvas,
+      context,
+      width,
+      height
+    };
+  }
+
+
+  function luminance(
+    red,
+    green,
+    blue
+  ) {
+    return (
+      red * 0.299
+      +
+      green * 0.587
+      +
+      blue * 0.114
+    );
+  }
+
+
+  function findAutoLevels(
+    pixels
+  ) {
+    const histogram =
+      new Uint32Array(
+        256
+      );
+
+
+    const pixelCount =
+      Math.max(
+        1,
+        pixels.length / 4
+      );
+
+
+    const stride =
+      Math.max(
+        1,
+        Math.floor(
+          pixelCount /
+          80000
+        )
+      );
+
+
+    let samples =
+      0;
+
+
+    for (
+      let pixelIndex = 0;
+      pixelIndex < pixelCount;
+      pixelIndex += stride
+    ) {
+      const offset =
+        pixelIndex * 4;
+
+
+      if (
+        pixels[offset + 3] <
+        8
+      ) {
+        continue;
+      }
+
+
+      const value =
+        Math.round(
+          luminance(
+            pixels[offset],
+            pixels[offset + 1],
+            pixels[offset + 2]
+          )
+        );
+
+
+      histogram[
+        Math.max(
+          0,
+          Math.min(
+            255,
+            value
+          )
+        )
+      ] += 1;
+
+
+      samples += 1;
+    }
+
+
+    if (
+      samples <
+      10
+    ) {
+      return {
+        low: 0,
+        high: 255
+      };
+    }
+
+
+    const lowTarget =
+      samples * 0.012;
+
+
+    const highTarget =
+      samples * 0.992;
+
+
+    let cumulative =
+      0;
+
+
+    let low =
+      0;
+
+
+    let high =
+      255;
+
+
+    for (
+      let value = 0;
+      value < 256;
+      value += 1
+    ) {
+      cumulative +=
+        histogram[value];
+
+
+      if (
+        cumulative >=
+        lowTarget
+      ) {
+        low =
+          value;
+
+        break;
+      }
+    }
+
+
+    cumulative =
+      0;
+
+
+    for (
+      let value = 0;
+      value < 256;
+      value += 1
+    ) {
+      cumulative +=
+        histogram[value];
+
+
+      if (
+        cumulative >=
+        highTarget
+      ) {
+        high =
+          value;
+
+        break;
+      }
+    }
+
+
+    if (
+      high - low <
+      48
+    ) {
+      low =
+        Math.max(
+          0,
+          low - 20
+        );
+
+
+      high =
+        Math.min(
+          255,
+          high + 20
+        );
+    }
+
+
+    return {
+      low,
+      high
+    };
+  }
+
+
+  function applyAutoTone(
+    imageData,
+    {
+      saturation = 1.06,
+      contrast = 1.04,
+      brightness = 0
+    } = {}
+  ) {
+    const pixels =
+      imageData.data;
+
+
+    const {
+      low,
+      high
+    } =
+      findAutoLevels(
+        pixels
+      );
+
+
+    const range =
+      Math.max(
+        1,
+        high - low
+      );
+
+
+    for (
+      let index = 0;
+      index < pixels.length;
+      index += 4
+    ) {
+      if (
+        pixels[index + 3] ===
+        0
+      ) {
+        continue;
+      }
+
+
+      let red =
+        (
+          (
+            pixels[index] -
+            low
+          ) /
+          range
+        ) *
+        255;
+
+
+      let green =
+        (
+          (
+            pixels[index + 1] -
+            low
+          ) /
+          range
+        ) *
+        255;
+
+
+      let blue =
+        (
+          (
+            pixels[index + 2] -
+            low
+          ) /
+          range
+        ) *
+        255;
+
+
+      const gray =
+        luminance(
+          red,
+          green,
+          blue
+        );
+
+
+      red =
+        gray
+        +
+        (
+          red - gray
+        ) *
+        saturation;
+
+
+      green =
+        gray
+        +
+        (
+          green - gray
+        ) *
+        saturation;
+
+
+      blue =
+        gray
+        +
+        (
+          blue - gray
+        ) *
+        saturation;
+
+
+      red =
+        (
+          red - 128
+        ) *
+        contrast
+        +
+        128
+        +
+        brightness;
+
+
+      green =
+        (
+          green - 128
+        ) *
+        contrast
+        +
+        128
+        +
+        brightness;
+
+
+      blue =
+        (
+          blue - 128
+        ) *
+        contrast
+        +
+        128
+        +
+        brightness;
+
+
+      pixels[index] =
+        clampChannel(
+          red
+        );
+
+
+      pixels[index + 1] =
+        clampChannel(
+          green
+        );
+
+
+      pixels[index + 2] =
+        clampChannel(
+          blue
+        );
+    }
+  }
+
+
+  function createBlurredBackground(
+    canvas,
+    radius
+  ) {
+    const blurred =
+      document.createElement(
+        "canvas"
+      );
+
+
+    blurred.width =
+      canvas.width;
+
+
+    blurred.height =
+      canvas.height;
+
+
+    const context =
+      blurred.getContext(
+        "2d",
+        {
+          alpha: true,
+          willReadFrequently: true
+        }
+      );
+
+
+    context.clearRect(
+      0,
+      0,
+      blurred.width,
+      blurred.height
+    );
+
+
+    if (
+      "filter" in context
+    ) {
+      context.filter =
+        `blur(${radius}px)`;
+    }
+
+
+    context.drawImage(
+      canvas,
+      0,
+      0
+    );
+
+
+    context.filter =
+      "none";
+
+
+    return context.getImageData(
+      0,
+      0,
+      blurred.width,
+      blurred.height
+    );
+  }
+
+
+  function normalizePageLighting(
+    imageData,
+    backgroundData,
+    strength = 1
+  ) {
+    const pixels =
+      imageData.data;
+
+
+    const background =
+      backgroundData.data;
+
+
+    for (
+      let index = 0;
+      index < pixels.length;
+      index += 4
+    ) {
+      if (
+        pixels[index + 3] ===
+        0
+      ) {
+        continue;
+      }
+
+
+      const currentLum =
+        Math.max(
+          1,
+          luminance(
+            pixels[index],
+            pixels[index + 1],
+            pixels[index + 2]
+          )
+        );
+
+
+      const backgroundLum =
+        Math.max(
+          28,
+          luminance(
+            background[index],
+            background[index + 1],
+            background[index + 2]
+          )
+        );
+
+
+      const targetLum =
+        clampChannel(
+          (
+            currentLum /
+            backgroundLum
+          ) *
+          236
+        );
+
+
+      const correctedLum =
+        currentLum
+        +
+        (
+          targetLum -
+          currentLum
+        ) *
+        strength;
+
+
+      const ratio =
+        correctedLum /
+        currentLum;
+
+
+      pixels[index] =
+        clampChannel(
+          pixels[index] *
+          ratio
+        );
+
+
+      pixels[index + 1] =
+        clampChannel(
+          pixels[index + 1] *
+          ratio
+        );
+
+
+      pixels[index + 2] =
+        clampChannel(
+          pixels[index + 2] *
+          ratio
+        );
+    }
+  }
+
+
+  function applyGrayscale(
+    imageData
+  ) {
     const pixels =
       imageData.data;
 
@@ -1767,21 +2340,11 @@
       index < pixels.length;
       index += 4
     ) {
-
       const gray =
-        (
-          pixels[index] *
-          0.299
-        )
-        +
-        (
-          pixels[index + 1] *
-          0.587
-        )
-        +
-        (
-          pixels[index + 2] *
-          0.114
+        luminance(
+          pixels[index],
+          pixels[index + 1],
+          pixels[index + 2]
         );
 
 
@@ -1795,7 +2358,506 @@
 
       pixels[index + 2] =
         gray;
+    }
+  }
 
+
+  function applyBlackAndWhite(
+    imageData,
+    backgroundData
+  ) {
+    const pixels =
+      imageData.data;
+
+
+    const background =
+      backgroundData.data;
+
+
+    for (
+      let index = 0;
+      index < pixels.length;
+      index += 4
+    ) {
+      if (
+        pixels[index + 3] ===
+        0
+      ) {
+        continue;
+      }
+
+
+      const gray =
+        luminance(
+          pixels[index],
+          pixels[index + 1],
+          pixels[index + 2]
+        );
+
+
+      const localBackground =
+        luminance(
+          background[index],
+          background[index + 1],
+          background[index + 2]
+        );
+
+
+      const threshold =
+        Math.max(
+          118,
+          Math.min(
+            224,
+            localBackground - 15
+          )
+        );
+
+
+      const distance =
+        gray - threshold;
+
+
+      let value;
+
+
+      if (
+        distance <=
+        -18
+      ) {
+        value =
+          0;
+      }
+      else if (
+        distance >=
+        14
+      ) {
+        value =
+          255;
+      }
+      else {
+        value =
+          (
+            (
+              distance + 18
+            ) /
+            32
+          ) *
+          255;
+      }
+
+
+      pixels[index] =
+        value;
+
+
+      pixels[index + 1] =
+        value;
+
+
+      pixels[index + 2] =
+        value;
+    }
+  }
+
+
+  function applyUnsharpMask(
+    imageData,
+    blurredData,
+    amount = 0.55
+  ) {
+    const pixels =
+      imageData.data;
+
+
+    const blurred =
+      blurredData.data;
+
+
+    for (
+      let index = 0;
+      index < pixels.length;
+      index += 4
+    ) {
+      pixels[index] =
+        clampChannel(
+          pixels[index]
+          +
+          (
+            pixels[index] -
+            blurred[index]
+          ) *
+          amount
+        );
+
+
+      pixels[index + 1] =
+        clampChannel(
+          pixels[index + 1]
+          +
+          (
+            pixels[index + 1] -
+            blurred[index + 1]
+          ) *
+          amount
+        );
+
+
+      pixels[index + 2] =
+        clampChannel(
+          pixels[index + 2]
+          +
+          (
+            pixels[index + 2] -
+            blurred[index + 2]
+          ) *
+          amount
+        );
+    }
+  }
+
+
+  function applySoftDenoise(
+    canvas
+  ) {
+    const source =
+      document.createElement(
+        "canvas"
+      );
+
+
+    source.width =
+      canvas.width;
+
+
+    source.height =
+      canvas.height;
+
+
+    source
+      .getContext(
+        "2d"
+      )
+      .drawImage(
+        canvas,
+        0,
+        0
+      );
+
+
+    const context =
+      canvas.getContext(
+        "2d",
+        {
+          alpha: true,
+          willReadFrequently: true
+        }
+      );
+
+
+    context.clearRect(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+
+    if (
+      "filter" in context
+    ) {
+      context.filter =
+        "blur(0.55px) contrast(1.03)";
+    }
+
+
+    context.drawImage(
+      source,
+      0,
+      0
+    );
+
+
+    context.filter =
+      "none";
+  }
+
+
+  function applyEnhancementPreset(
+    canvas,
+    mode
+  ) {
+    if (
+      !mode
+      ||
+      mode ===
+      "original"
+    ) {
+      return;
+    }
+
+
+    const context =
+      canvas.getContext(
+        "2d",
+        {
+          alpha: true,
+          willReadFrequently: true
+        }
+      );
+
+
+    if (
+      mode ===
+      "denoise"
+    ) {
+      applySoftDenoise(
+        canvas
+      );
+
+      return;
+    }
+
+
+    let imageData =
+      context.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+
+    if (
+      mode ===
+      "auto"
+    ) {
+      applyAutoTone(
+        imageData,
+        {
+          saturation: 1.05,
+          contrast: 1.05,
+          brightness: 2
+        }
+      );
+    }
+
+
+    if (
+      mode ===
+      "photo"
+    ) {
+      applyAutoTone(
+        imageData,
+        {
+          saturation: 1.13,
+          contrast: 1.055,
+          brightness: 1
+        }
+      );
+    }
+
+
+    if (
+      mode ===
+      "vivid"
+    ) {
+      applyAutoTone(
+        imageData,
+        {
+          saturation: 1.28,
+          contrast: 1.1,
+          brightness: 2
+        }
+      );
+    }
+
+
+    if (
+      mode ===
+      "grayscale"
+    ) {
+      applyAutoTone(
+        imageData,
+        {
+          saturation: 1,
+          contrast: 1.04,
+          brightness: 2
+        }
+      );
+
+
+      applyGrayscale(
+        imageData
+      );
+    }
+
+
+    if (
+      mode ===
+      "shadow"
+      ||
+      mode ===
+      "document"
+      ||
+      mode ===
+      "bw"
+    ) {
+      const backgroundData =
+        createBlurredBackground(
+          canvas,
+          Math.max(
+            10,
+            Math.round(
+              Math.min(
+                canvas.width,
+                canvas.height
+              ) *
+              0.018
+            )
+          )
+        );
+
+
+      if (
+        mode ===
+        "bw"
+      ) {
+        applyBlackAndWhite(
+          imageData,
+          backgroundData
+        );
+      }
+      else {
+        normalizePageLighting(
+          imageData,
+          backgroundData,
+          mode ===
+          "document"
+            ? 0.94
+            : 0.72
+        );
+
+
+        applyAutoTone(
+          imageData,
+          mode ===
+          "document"
+            ? {
+                saturation: 0.96,
+                contrast: 1.13,
+                brightness: 8
+              }
+            : {
+                saturation: 1.02,
+                contrast: 1.055,
+                brightness: 4
+              }
+        );
+
+
+        if (
+          mode ===
+          "document"
+        ) {
+          const pixels =
+            imageData.data;
+
+
+          for (
+            let index = 0;
+            index < pixels.length;
+            index += 4
+          ) {
+            const gray =
+              luminance(
+                pixels[index],
+                pixels[index + 1],
+                pixels[index + 2]
+              );
+
+
+            if (
+              gray >
+              188
+            ) {
+              const lift =
+                (
+                  gray - 188
+                ) /
+                67;
+
+
+              pixels[index] =
+                clampChannel(
+                  pixels[index]
+                  +
+                  15 * lift
+                );
+
+
+              pixels[index + 1] =
+                clampChannel(
+                  pixels[index + 1]
+                  +
+                  15 * lift
+                );
+
+
+              pixels[index + 2] =
+                clampChannel(
+                  pixels[index + 2]
+                  +
+                  15 * lift
+                );
+            }
+          }
+        }
+      }
+    }
+
+
+    if (
+      mode ===
+      "sharpen"
+    ) {
+      applyAutoTone(
+        imageData,
+        {
+          saturation: 1.01,
+          contrast: 1.08,
+          brightness: 1
+        }
+      );
+
+
+      context.putImageData(
+        imageData,
+        0,
+        0
+      );
+
+
+      const blurredData =
+        createBlurredBackground(
+          canvas,
+          1.15
+        );
+
+
+      imageData =
+        context.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+
+
+      applyUnsharpMask(
+        imageData,
+        blurredData,
+        0.72
+      );
     }
 
 
@@ -1804,52 +2866,602 @@
       0,
       0
     );
-
   }
 
 
-  /*
-   * Convert everything through PNG.
-   *
-   * PNG is used instead of JPEG because:
-   *
-   * - PNG supports transparency
-   * - no artificial white background
-   * - works consistently for JPG / PNG / WEBP input
-   */
+  async function renderImageWithEnhancement(
+    file,
+    mode = "original",
+    maximumDimension = 2600
+  ) {
+    const image =
+      await loadImageElement(
+        file
+      );
 
-  const pngDataUrl =
-    canvas.toDataURL(
-      "image/png"
+
+    const work =
+      createWorkingCanvas(
+        image,
+        maximumDimension
+      );
+
+
+    applyEnhancementPreset(
+      work.canvas,
+      mode
     );
 
 
-  const pngBytes =
-    await fetch(
-      pngDataUrl
-    ).then(
-      (response) =>
-        response.arrayBuffer()
+    return work;
+  }
+
+
+  async function canvasToObjectUrl(
+    canvas
+  ) {
+    const blob =
+      await new Promise(
+        (resolve) => {
+          canvas.toBlob(
+            resolve,
+            "image/jpeg",
+            0.9
+          );
+        }
+      );
+
+
+    if (
+      !blob
+    ) {
+      return canvas.toDataURL(
+        "image/jpeg",
+        0.9
+      );
+    }
+
+
+    return URL.createObjectURL(
+      blob
+    );
+  }
+
+
+  function releaseEnhancementPreview() {
+    if (
+      enhancementSession.previewUrl
+      &&
+      enhancementSession.previewUrl.startsWith(
+        "blob:"
+      )
+    ) {
+      URL.revokeObjectURL(
+        enhancementSession.previewUrl
+      );
+    }
+
+
+    enhancementSession.previewUrl =
+      "";
+  }
+
+
+  async function renderEnhancementPreview() {
+    const item =
+      enhancementSession.item;
+
+
+    if (
+      !item
+      ||
+      !elements.enhancementPreview
+    ) {
+      return;
+    }
+
+
+    const mode =
+      enhancementSession.mode
+      ||
+      "original";
+
+
+    const requestId =
+      ++enhancementSession.requestId;
+
+
+    elements.enhancementPresetButtons.forEach(
+      (button) => {
+        const active =
+          button.dataset.enhancement ===
+          mode;
+
+
+        button.classList.toggle(
+          "is-active",
+          active
+        );
+
+
+        button.setAttribute(
+          "aria-pressed",
+          String(active)
+        );
+      }
     );
 
 
-  const embedded =
-    await pdfDocument.embedPng(
-      pngBytes
+    elements.enhancementPreviewLabel.textContent =
+      getEnhancementLabel(
+        mode
+      );
+
+
+    if (
+      mode ===
+      "original"
+    ) {
+      releaseEnhancementPreview();
+
+
+      elements.enhancementRendering.hidden =
+        true;
+
+
+      elements.enhancementPreview.src =
+        item.previewUrl;
+
+
+      elements.enhancementStatus.textContent =
+        "Original image selected. No processing will be applied.";
+
+
+      return;
+    }
+
+
+    elements.enhancementRendering.hidden =
+      false;
+
+
+    elements.enhancementStatus.textContent =
+      "Rendering a local preview…";
+
+
+    await new Promise(
+      (resolve) =>
+        requestAnimationFrame(
+          () =>
+            requestAnimationFrame(
+              resolve
+            )
+        )
     );
 
 
-  return {
+    try {
+      const previewDimension =
+        window.matchMedia(
+          "(max-width: 720px)"
+        ).matches
+          ? 760
+          : 1100;
 
-    embedded,
 
-    width,
+      const {
+        canvas
+      } =
+        await renderImageWithEnhancement(
+          item.file,
+          mode,
+          previewDimension
+        );
 
-    height
 
-  };
+      if (
+        requestId !==
+        enhancementSession.requestId
+      ) {
+        return;
+      }
 
-}
+
+      const previewUrl =
+        await canvasToObjectUrl(
+          canvas
+        );
+
+
+      if (
+        requestId !==
+        enhancementSession.requestId
+      ) {
+        if (
+          previewUrl.startsWith(
+            "blob:"
+          )
+        ) {
+          URL.revokeObjectURL(
+            previewUrl
+          );
+        }
+
+
+        return;
+      }
+
+
+      releaseEnhancementPreview();
+
+
+      enhancementSession.previewUrl =
+        previewUrl;
+
+
+      elements.enhancementPreview.src =
+        previewUrl;
+
+
+      elements.enhancementStatus.textContent =
+        `${getEnhancementLabel(mode)} preview · processed locally`;
+    }
+    catch (error) {
+      console.error(
+        "MazeDocs enhancement preview:",
+        error
+      );
+
+
+      elements.enhancementPreview.src =
+        item.previewUrl;
+
+
+      elements.enhancementStatus.textContent =
+        "Could not render this preview. The original is shown instead.";
+    }
+    finally {
+      if (
+        requestId ===
+        enhancementSession.requestId
+      ) {
+        elements.enhancementRendering.hidden =
+          true;
+      }
+    }
+  }
+
+
+  function openEnhancementModal(
+    item,
+    items,
+    trigger
+  ) {
+    if (
+      !item
+      ||
+      !elements.enhancementModal
+    ) {
+      return;
+    }
+
+
+    releaseEnhancementPreview();
+
+
+    enhancementSession.item =
+      item;
+
+
+    enhancementSession.items =
+      items;
+
+
+    enhancementSession.mode =
+      item.enhancement
+      ||
+      "original";
+
+
+    enhancementSession.returnFocus =
+      trigger
+      ||
+      document.activeElement;
+
+
+    elements.enhancementOriginal.src =
+      item.previewUrl;
+
+
+    elements.enhancementPreview.src =
+      item.previewUrl;
+
+
+    elements.enhancementModal.hidden =
+      false;
+
+
+    document.body.classList.add(
+      "enhancement-open"
+    );
+
+
+    renderEnhancementPreview();
+
+
+    window.setTimeout(
+      () => {
+        elements.enhancementClose?.focus();
+      },
+      20
+    );
+  }
+
+
+  function closeEnhancementModal() {
+    if (
+      !elements.enhancementModal
+      ||
+      elements.enhancementModal.hidden
+    ) {
+      return;
+    }
+
+
+    enhancementSession.requestId +=
+      1;
+
+
+    releaseEnhancementPreview();
+
+
+    elements.enhancementModal.hidden =
+      true;
+
+
+    document.body.classList.remove(
+      "enhancement-open"
+    );
+
+
+    const focusTarget =
+      enhancementSession.returnFocus;
+
+
+    enhancementSession.item =
+      null;
+
+
+    enhancementSession.items =
+      null;
+
+
+    enhancementSession.returnFocus =
+      null;
+
+
+    focusTarget?.focus?.();
+  }
+
+
+  function rerenderImageToolForItems(
+    items
+  ) {
+    if (
+      items ===
+      state.imageFiles
+    ) {
+      renderImageFiles();
+
+      return;
+    }
+
+
+    if (
+      items ===
+      state.scanFiles
+    ) {
+      renderScanFiles();
+    }
+  }
+
+
+  function bindImageEnhancement() {
+    if (
+      !elements.enhancementModal
+    ) {
+      return;
+    }
+
+
+    elements.enhancementPresetButtons.forEach(
+      (button) => {
+        button.addEventListener(
+          "click",
+          () => {
+            enhancementSession.mode =
+              button.dataset.enhancement
+              ||
+              "original";
+
+
+            renderEnhancementPreview();
+          }
+        );
+      }
+    );
+
+
+    elements.enhancementApplyPage.addEventListener(
+      "click",
+      () => {
+        const item =
+          enhancementSession.item;
+
+
+        const items =
+          enhancementSession.items;
+
+
+        if (
+          !item
+          ||
+          !items
+        ) {
+          return;
+        }
+
+
+        item.enhancement =
+          enhancementSession.mode
+          ||
+          "original";
+
+
+        rerenderImageToolForItems(
+          items
+        );
+
+
+        showToast(
+          `${getEnhancementLabel(item.enhancement)} applied to this page.`
+        );
+
+
+        closeEnhancementModal();
+      }
+    );
+
+
+    elements.enhancementApplyAll.addEventListener(
+      "click",
+      () => {
+        const items =
+          enhancementSession.items;
+
+
+        if (
+          !items?.length
+        ) {
+          return;
+        }
+
+
+        const mode =
+          enhancementSession.mode
+          ||
+          "original";
+
+
+        items.forEach(
+          (item) => {
+            item.enhancement =
+              mode;
+          }
+        );
+
+
+        rerenderImageToolForItems(
+          items
+        );
+
+
+        showToast(
+          `${getEnhancementLabel(mode)} applied to all pages.`
+        );
+
+
+        closeEnhancementModal();
+      }
+    );
+
+
+    elements.enhancementClose.addEventListener(
+      "click",
+      closeEnhancementModal
+    );
+
+
+    elements.enhancementModal.addEventListener(
+      "click",
+      (event) => {
+        if (
+          event.target ===
+          elements.enhancementModal
+        ) {
+          closeEnhancementModal();
+        }
+      }
+    );
+
+
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          event.key ===
+          "Escape"
+          &&
+          !elements.enhancementModal.hidden
+        ) {
+          closeEnhancementModal();
+        }
+      }
+    );
+  }
+
+
+  async function normalizeImageForPdf(
+    pdfDocument,
+    item
+  ) {
+    const enhancement =
+      item?.enhancement
+      ||
+      "original";
+
+
+    const {
+      canvas,
+      width,
+      height
+    } =
+      await renderImageWithEnhancement(
+        item.file,
+        enhancement,
+        2600
+      );
+
+
+    const pngDataUrl =
+      canvas.toDataURL(
+        "image/png"
+      );
+
+
+    const pngBytes =
+      await fetch(
+        pngDataUrl
+      ).then(
+        (response) =>
+          response.arrayBuffer()
+      );
+
+
+    const embedded =
+      await pdfDocument.embedPng(
+        pngBytes
+      );
+
+
+    return {
+      embedded,
+      width,
+      height
+    };
+  }
+
+
   function addImagesToState(
     targetArray,
     files
@@ -1860,10 +3472,13 @@
       );
 
 
-    if (!supportedImages.length) {
+    if (
+      !supportedImages.length
+    ) {
       showToast(
         "Choose JPG, PNG, or WEBP images."
       );
+
 
       return;
     }
@@ -1880,7 +3495,10 @@
           previewUrl:
             URL.createObjectURL(
               file
-            )
+            ),
+
+          enhancement:
+            "original"
         });
       }
     );
@@ -1901,7 +3519,8 @@
   function createImageCard(
     item,
     index,
-    onRemove
+    onRemove,
+    onEnhance
   ) {
     const card =
       document.createElement(
@@ -1917,37 +3536,74 @@
       item.id;
 
 
+    const mode =
+      item.enhancement
+      ||
+      "original";
+
+
     card.innerHTML = `
       <div class="image-card__preview">
         <img alt="" />
+        <span class="image-card__preset">${getEnhancementLabel(mode)}</span>
       </div>
 
       <div class="image-card__footer">
-        <span></span>
+        <div class="image-card__meta">
+          <span></span>
+          <small>${mode === "original" ? "No enhancement" : "Enhancement ready for export"}</small>
+        </div>
 
-        <button
-          class="file-remove"
-          type="button"
-          aria-label="Remove image"
-        >
-          ×
-        </button>
+        <div class="image-card__controls">
+          <button
+            class="image-enhance"
+            type="button"
+          >
+            Enhance
+          </button>
+
+          <button
+            class="file-remove"
+            type="button"
+            aria-label="Remove image"
+          >
+            ×
+          </button>
+        </div>
       </div>
     `;
 
 
     card
-      .querySelector("img")
+      .querySelector(
+        "img"
+      )
       .src =
         item.previewUrl;
 
 
     card
       .querySelector(
-        ".image-card__footer span"
+        ".image-card__footer .image-card__meta > span"
       )
       .textContent =
         `${String(index + 1).padStart(2, "0")} · ${item.file.name}`;
+
+
+    card
+      .querySelector(
+        ".image-enhance"
+      )
+      .addEventListener(
+        "click",
+        (event) => {
+          event.stopPropagation();
+
+          onEnhance?.(
+            event.currentTarget
+          );
+        }
+      );
 
 
     card
@@ -1956,7 +3612,11 @@
       )
       .addEventListener(
         "click",
-        onRemove
+        (event) => {
+          event.stopPropagation();
+
+          onRemove();
+        }
       );
 
 
@@ -1965,150 +3625,122 @@
 
 
   async function buildPdfFromImages(
-  items,
-  filename,
-  grayscale = false
-) {
-
-  if (!items.length) {
-
-    showToast(
-      "Add at least one image."
-    );
-
-
-    return;
-
-  }
-
-
-  showProcessing(
-    "Building PDF.",
-    "Turning each image directly into a PDF page."
-  );
-
-
-  try {
-
-    const output =
-      await PDFLib.PDFDocument.create();
-
-
-    for (
-      let index = 0;
-      index < items.length;
-      index += 1
+    items,
+    filename
+  ) {
+    if (
+      !items.length
     ) {
-
-      elements.processingDetail.textContent =
-        `Adding image ${index + 1} of ${items.length}.`;
-
-
-      const imageData =
-        await normalizeImageForPdf(
-          output,
-          items[index].file,
-          grayscale
-        );
-
-
-      /*
-       * ======================================================
-       * IMAGE-SIZED PDF PAGE
-       * ======================================================
-       *
-       * Instead of creating:
-       *
-       * 595 x 842 A4 page
-       *
-       * we make the PDF page EXACTLY match the image.
-       *
-       * This removes:
-       *
-       * - white borders
-       * - page margins
-       * - A4 padding
-       * - letterboxing
-       */
-
-
-      const pageWidth =
-        imageData.width;
-
-
-      const pageHeight =
-        imageData.height;
-
-
-      const page =
-        output.addPage([
-          pageWidth,
-          pageHeight
-        ]);
-
-
-      /*
-       * Image starts at the exact bottom-left corner
-       * and fills 100% of the PDF page.
-       */
-
-      page.drawImage(
-        imageData.embedded,
-        {
-
-          x:
-            0,
-
-          y:
-            0,
-
-          width:
-            pageWidth,
-
-          height:
-            pageHeight
-
-        }
+      showToast(
+        "Add at least one image."
       );
 
+
+      return;
     }
 
 
-    const bytes =
-      await output.save();
-
-
-    downloadBytes(
-      bytes,
-      filename,
-      "application/pdf"
+    showProcessing(
+      "Building PDF.",
+      "Applying page enhancements locally and creating the final PDF."
     );
 
 
-    showToast(
-      "PDF ready."
-    );
+    try {
+      const output =
+        await PDFLib.PDFDocument.create();
 
+
+      for (
+        let index = 0;
+        index < items.length;
+        index += 1
+      ) {
+        const item =
+          items[index];
+
+
+        const enhancement =
+          item.enhancement
+          ||
+          "original";
+
+
+        elements.processingDetail.textContent =
+          `Page ${index + 1} of ${items.length} · ${getEnhancementLabel(enhancement)}.`;
+
+
+        const imageData =
+          await normalizeImageForPdf(
+            output,
+            item
+          );
+
+
+        const page =
+          output.addPage(
+            [
+              imageData.width,
+              imageData.height
+            ]
+          );
+
+
+        page.drawImage(
+          imageData.embedded,
+          {
+            x: 0,
+            y: 0,
+            width: imageData.width,
+            height: imageData.height
+          }
+        );
+
+
+        /*
+         * Give the browser a frame between pages. This keeps long
+         * multi-page exports responsive on student laptops/phones.
+         */
+        await new Promise(
+          (resolve) =>
+            requestAnimationFrame(
+              resolve
+            )
+        );
+      }
+
+
+      const bytes =
+        await output.save();
+
+
+      downloadBytes(
+        bytes,
+        filename,
+        "application/pdf"
+      );
+
+
+      showToast(
+        "PDF ready."
+      );
+    }
+    catch (error) {
+      console.error(
+        error
+      );
+
+
+      showToast(
+        "Could not build this PDF."
+      );
+    }
+    finally {
+      hideProcessing();
+    }
   }
-  catch (error) {
-
-    console.error(
-      error
-    );
 
 
-    showToast(
-      "Could not build this PDF."
-    );
-
-  }
-  finally {
-
-    hideProcessing();
-
-  }
-
-}
   /* ==========================================================
      12. IMAGES → PDF
      ========================================================== */
@@ -2137,7 +3769,6 @@
             item,
             index,
             () => {
-
               revokePreview(
                 item
               );
@@ -2152,7 +3783,13 @@
 
 
               renderImageFiles();
-
+            },
+            (trigger) => {
+              openEnhancementModal(
+                item,
+                state.imageFiles,
+                trigger
+              );
             }
           );
 
@@ -2207,7 +3844,6 @@
             item,
             index,
             () => {
-
               revokePreview(
                 item
               );
@@ -2222,7 +3858,13 @@
 
 
               renderScanFiles();
-
+            },
+            (trigger) => {
+              openEnhancementModal(
+                item,
+                state.scanFiles,
+                trigger
+              );
             }
           );
 
@@ -2238,6 +3880,18 @@
     elements.scanActions.hidden =
       state.scanFiles.length ===
       0;
+
+
+    if (
+      elements.scanCount
+    ) {
+      elements.scanCount.textContent =
+        `${state.scanFiles.length} page${
+          state.scanFiles.length === 1
+            ? ""
+            : "s"
+        }`;
+    }
   }
 
 
@@ -3001,8 +4655,7 @@
 
         buildPdfFromImages(
           state.imageFiles,
-          "mazedocs-images.pdf",
-          false
+          "mazedocs-images.pdf"
         );
 
       }
@@ -3045,8 +4698,7 @@
 
         buildPdfFromImages(
           state.scanFiles,
-          "mazedocs-scan.pdf",
-          elements.scanGrayscale.checked
+          "mazedocs-scan.pdf"
         );
 
       }
@@ -3340,6 +4992,8 @@
     bindImagesTool();
 
     bindScanTool();
+
+    bindImageEnhancement();
 
     bindOcrTool();
 

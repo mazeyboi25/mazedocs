@@ -256,7 +256,7 @@
         <div class="image-grid" id="images-list"></div>
 
         <div class="action-bar" id="images-actions" hidden>
-          <div><span id="images-count">0 images</span><small>Drag images to reorder</small></div>
+          <div><span id="images-count">0 images</span><small>Drag to reorder · Enhance any page</small></div>
           <button class="button button--primary" id="images-build-button" type="button">Build PDF</button>
         </div>
       </section>
@@ -283,10 +283,7 @@
         <div class="image-grid" id="scan-list"></div>
 
         <div class="action-bar" id="scan-actions" hidden>
-          <label class="toggle-row">
-            <input id="scan-grayscale" type="checkbox" />
-            <span>Convert pages to grayscale</span>
-          </label>
+          <div><span id="scan-count">0 pages</span><small>Enhance any page before export</small></div>
           <button class="button button--primary" id="scan-build-button" type="button">Save scanned PDF</button>
         </div>
       </section>
@@ -410,6 +407,77 @@
         </div>
 
       </section>
+
+      <!-- IMAGE ENHANCEMENT PREVIEW -->
+      <div
+        class="enhancement-modal"
+        id="enhancement-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="enhancement-title"
+        hidden
+      >
+        <section class="enhancement-card">
+          <div class="enhancement-card__topbar">
+            <div>
+              <span class="mono-label">LOCAL IMAGE ENHANCEMENT</span>
+              <h3 id="enhancement-title">Preview this page.</h3>
+            </div>
+
+            <button
+              class="enhancement-close"
+              id="enhancement-close"
+              type="button"
+              aria-label="Close enhancement preview"
+            >×</button>
+          </div>
+
+          <div class="enhancement-compare">
+            <figure class="enhancement-pane">
+              <figcaption>ORIGINAL</figcaption>
+              <div class="enhancement-image-frame">
+                <img id="enhancement-original" alt="Original page preview" />
+              </div>
+            </figure>
+
+            <figure class="enhancement-pane">
+              <figcaption>
+                <span>PREVIEW</span>
+                <strong id="enhancement-preview-label">Original</strong>
+              </figcaption>
+              <div class="enhancement-image-frame enhancement-image-frame--preview">
+                <img id="enhancement-preview" alt="Enhanced page preview" />
+                <div class="enhancement-rendering" id="enhancement-rendering" hidden>
+                  <span></span>
+                  <b>Rendering preview…</b>
+                </div>
+              </div>
+            </figure>
+          </div>
+
+          <div class="enhancement-presets" aria-label="Image enhancement presets">
+            <button type="button" data-enhancement="original">Original<small>No processing</small></button>
+            <button type="button" data-enhancement="auto">Auto<small>Balanced cleanup</small></button>
+            <button type="button" data-enhancement="document">Document<small>Whiter paper</small></button>
+            <button type="button" data-enhancement="vivid">Vivid Color<small>Clearer colors</small></button>
+            <button type="button" data-enhancement="grayscale">Grayscale<small>Clean gray scan</small></button>
+            <button type="button" data-enhancement="bw">B&amp;W<small>Crisp text</small></button>
+            <button type="button" data-enhancement="shadow">Shadow Fix<small>Even lighting</small></button>
+            <button type="button" data-enhancement="sharpen">Sharp Text<small>Stronger edges</small></button>
+            <button type="button" data-enhancement="denoise">Denoise<small>Reduce grain</small></button>
+            <button type="button" data-enhancement="photo">Photo<small>Natural boost</small></button>
+          </div>
+
+          <div class="enhancement-card__footer">
+            <p id="enhancement-status">Preview is processed locally in your browser.</p>
+
+            <div>
+              <button class="button button--quiet" id="enhancement-apply-all" type="button">Apply to all pages</button>
+              <button class="button button--primary" id="enhancement-apply-page" type="button">Apply to this page</button>
+            </div>
+          </div>
+        </section>
+      </div>
 
       <div class="processing-overlay" id="processing-overlay" hidden>
         <div class="processing-overlay__card">
