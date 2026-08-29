@@ -461,513 +461,227 @@
     <a href="#home">Back to top ↑</a>
   </footer>
 
-  /* ============================================================
-   MAZEDOCS FEEDBACK
-   ============================================================ */
+    <!-- =========================================================
+       MAZEDOCS FEEDBACK
+       ========================================================= -->
+
+  <button
+    class="feedback-launcher"
+    id="feedback-launcher"
+    type="button"
+    aria-haspopup="dialog"
+    aria-controls="feedback-modal"
+  >
+    Feedback <span>✦</span>
+  </button>
+
+
+  <div
+    class="feedback-modal"
+    id="feedback-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="feedback-title"
+    hidden
+  >
+    <section class="feedback-card">
+
+      <div class="feedback-card__topbar">
+
+        <div>
+          <span class="mono-label">
+            MAZEDOCS / FEEDBACK
+          </span>
+
+          <strong id="feedback-title">
+            Tell me what you think.
+          </strong>
+        </div>
+
+        <button
+          class="feedback-close"
+          id="feedback-close"
+          type="button"
+          aria-label="Close feedback form"
+        >
+          ×
+        </button>
+
+      </div>
+
+
+      <form
+        class="feedback-form"
+        id="feedback-form"
+      >
+
+        <!-- Rating -->
+
+        <div class="feedback-field">
+
+          <span class="feedback-label">
+            Overall rating
+          </span>
+
+          <input
+            id="feedback-rating"
+            name="rating"
+            type="hidden"
+            value=""
+          />
+
+          <div
+            class="feedback-stars"
+            aria-label="Choose a rating from 1 to 5 stars"
+          >
+
+            <button
+              class="feedback-star"
+              type="button"
+              data-rating="1"
+              aria-label="1 star"
+              aria-pressed="false"
+            >★</button>
+
+            <button
+              class="feedback-star"
+              type="button"
+              data-rating="2"
+              aria-label="2 stars"
+              aria-pressed="false"
+            >★</button>
+
+            <button
+              class="feedback-star"
+              type="button"
+              data-rating="3"
+              aria-label="3 stars"
+              aria-pressed="false"
+            >★</button>
+
+            <button
+              class="feedback-star"
+              type="button"
+              data-rating="4"
+              aria-label="4 stars"
+              aria-pressed="false"
+            >★</button>
 
-.feedback-launcher {
-  position: fixed;
-  z-index: 210;
+            <button
+              class="feedback-star"
+              type="button"
+              data-rating="5"
+              aria-label="5 stars"
+              aria-pressed="false"
+            >★</button>
 
-  left: 16px;
-  bottom: 16px;
+          </div>
 
-  min-height: 42px;
+        </div>
 
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
 
-  padding: 0 13px;
+        <!-- Feedback Type -->
 
-  border: 2px solid var(--line);
-  border-radius: 11px;
+        <label class="feedback-field">
 
-  background: var(--pink);
-  color: var(--ink);
+          <span class="feedback-label">
+            Feedback type
+          </span>
 
-  box-shadow: var(--shadow-small);
+          <select
+            name="type"
+            required
+          >
+            <option
+              value=""
+              selected
+              disabled
+            >
+              Choose one…
+            </option>
 
-  font-family: var(--mono);
-  font-size: 8px;
-  font-weight: 700;
+            <option value="Bug">
+              Bug
+            </option>
 
-  letter-spacing: .06em;
-  text-transform: uppercase;
+            <option value="Suggestion">
+              Suggestion
+            </option>
 
-  transition:
-    transform .18s ease,
-    box-shadow .18s ease;
-}
+            <option value="Compliment">
+              Compliment
+            </option>
 
+            <option value="Other">
+              Other
+            </option>
+          </select>
 
-.feedback-launcher:hover {
-  transform: translate(-2px, -2px);
+        </label>
 
-  box-shadow:
-    6px
-    6px
-    0
-    var(--line);
-}
 
+        <!-- Message -->
 
-.feedback-launcher:active {
-  transform: translate(2px, 2px);
+        <label class="feedback-field">
 
-  box-shadow:
-    1px
-    1px
-    0
-    var(--line);
-}
+          <span class="feedback-label">
+            Message
+          </span>
 
+          <textarea
+            name="message"
+            rows="6"
+            minlength="5"
+            maxlength="1500"
+            placeholder="What worked well? What should MazeDocs improve?"
+            required
+          ></textarea>
 
-/* Modal background */
+        </label>
 
-.feedback-modal {
-  position: fixed;
-  z-index: 500;
 
-  inset: 0;
+        <!-- Optional visitor email -->
 
-  display: grid;
-  place-items: center;
+        <label class="feedback-field">
 
-  padding: 20px;
+          <span class="feedback-label">
+            Your email
+            <small>optional</small>
+          </span>
 
-  overflow-y: auto;
+          <input
+            name="email"
+            type="email"
+            autocomplete="email"
+            placeholder="Only if you want a reply"
+          />
 
-  background:
-    rgba(
-      17,
-      18,
-      24,
-      .62
-    );
+        </label>
 
-  backdrop-filter:
-    blur(7px);
 
-  -webkit-backdrop-filter:
-    blur(7px);
-}
+        <div class="feedback-form__footer">
 
+          <p
+            class="feedback-status"
+            id="feedback-status"
+            role="status"
+            aria-live="polite"
+          ></p>
 
-/* Feedback window */
+          <button
+            class="button button--primary"
+            id="feedback-submit"
+            type="submit"
+          >
+            Send feedback
+          </button>
 
-.feedback-card {
-  width:
-    min(
-      620px,
-      100%
-    );
+        </div>
 
-  max-height:
-    calc(
-      100vh - 40px
-    );
+      </form>
 
-  overflow-y: auto;
-
-  border:
-    3px solid
-    var(--line);
-
-  border-radius: 20px;
-
-  background:
-    var(--panel);
-
-  box-shadow:
-    10px
-    10px
-    0
-    var(--line);
-}
-
-
-/* Header */
-
-.feedback-card__topbar {
-  display: flex;
-
-  align-items:
-    flex-start;
-
-  justify-content:
-    space-between;
-
-  gap: 20px;
-
-  padding: 20px;
-
-  border-bottom:
-    2px solid
-    var(--line);
-
-  background:
-    var(--cyan);
-}
-
-
-.feedback-card__topbar > div {
-  display: flex;
-
-  flex-direction:
-    column;
-
-  gap: 7px;
-}
-
-
-.feedback-card__topbar strong {
-  font-size:
-    clamp(
-      22px,
-      4vw,
-      34px
-    );
-
-  line-height: 1;
-
-  letter-spacing:
-    -.04em;
-}
-
-
-.feedback-close {
-  flex: 0 0 auto;
-
-  width: 38px;
-  height: 38px;
-
-  display: grid;
-  place-items: center;
-
-  padding: 0;
-
-  border:
-    2px solid
-    var(--line);
-
-  border-radius: 10px;
-
-  background: white;
-
-  box-shadow:
-    3px
-    3px
-    0
-    var(--line);
-
-  font-size: 22px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-
-/* Form */
-
-.feedback-form {
-  display: grid;
-
-  gap: 18px;
-
-  padding: 20px;
-}
-
-
-.feedback-field {
-  display: grid;
-
-  gap: 8px;
-}
-
-
-.feedback-label {
-  font-family:
-    var(--mono);
-
-  font-size: 8px;
-  font-weight: 700;
-
-  letter-spacing:
-    .08em;
-
-  text-transform:
-    uppercase;
-}
-
-
-.feedback-label small {
-  color:
-    var(--muted);
-
-  font-size: 7px;
-  font-weight: 500;
-}
-
-
-/* Inputs */
-
-.feedback-field select,
-.feedback-field textarea,
-.feedback-field input[type="email"] {
-  width: 100%;
-
-  border:
-    2px solid
-    var(--line);
-
-  border-radius: 11px;
-
-  background: white;
-
-  color:
-    var(--ink);
-
-  outline: none;
-
-  box-shadow:
-    3px
-    3px
-    0
-    rgba(
-      17,
-      18,
-      24,
-      .18
-    );
-
-  font-family:
-    var(--font);
-
-  font-size: 12px;
-}
-
-
-.feedback-field select,
-.feedback-field input[type="email"] {
-  min-height: 46px;
-
-  padding:
-    0
-    12px;
-}
-
-
-.feedback-field textarea {
-  min-height: 130px;
-
-  resize: vertical;
-
-  padding: 12px;
-
-  line-height: 1.55;
-}
-
-
-.feedback-field select:focus,
-.feedback-field textarea:focus,
-.feedback-field input[type="email"]:focus {
-  border-color:
-    var(--blue);
-
-  box-shadow:
-    4px
-    4px
-    0
-    var(--blue);
-}
-
-
-/* Stars */
-
-.feedback-stars {
-  display: flex;
-
-  align-items:
-    center;
-
-  gap: 7px;
-}
-
-
-.feedback-star {
-  width: 44px;
-  height: 44px;
-
-  display: grid;
-
-  place-items:
-    center;
-
-  padding: 0;
-
-  border:
-    2px solid
-    var(--line);
-
-  border-radius: 10px;
-
-  background: white;
-
-  color: #c8c8ce;
-
-  box-shadow:
-    2px
-    2px
-    0
-    var(--line);
-
-  font-size: 24px;
-
-  line-height: 1;
-
-  transition:
-    transform .14s ease,
-    background .14s ease,
-    color .14s ease;
-}
-
-
-.feedback-star:hover {
-  transform:
-    translateY(-2px);
-}
-
-
-.feedback-star.is-active {
-  background:
-    var(--yellow);
-
-  color:
-    var(--ink);
-}
-
-
-/* Bottom */
-
-.feedback-form__footer {
-  display: flex;
-
-  align-items:
-    center;
-
-  justify-content:
-    space-between;
-
-  gap: 16px;
-
-  padding-top: 4px;
-}
-
-
-.feedback-status {
-  flex: 1;
-
-  min-height: 18px;
-
-  margin: 0;
-
-  color:
-    var(--muted);
-
-  font-size: 10px;
-  font-weight: 700;
-
-  line-height: 1.5;
-}
-
-
-.feedback-status.is-success {
-  color: #167a4c;
-}
-
-
-.feedback-status.is-error {
-  color: #bd2626;
-}
-
-
-#feedback-submit:disabled {
-  cursor: wait;
-
-  opacity: .65;
-}
-
-
-/* Mobile */
-
-@media (max-width: 700px) {
-
-  .feedback-launcher {
-    left: 12px;
-    bottom: 12px;
-  }
-
-
-  .feedback-modal {
-    align-items: end;
-
-    padding: 12px;
-  }
-
-
-  .feedback-card {
-    max-height:
-      calc(
-        100dvh - 24px
-      );
-
-    border-radius: 17px;
-
-    box-shadow:
-      6px
-      6px
-      0
-      var(--line);
-  }
-
-
-  .feedback-card__topbar,
-  .feedback-form {
-    padding: 16px;
-  }
-
-
-  .feedback-stars {
-    gap: 6px;
-  }
-
-
-  .feedback-star {
-    flex: 1;
-
-    width: auto;
-
-    min-width: 0;
-
-    height: 42px;
-
-    font-size: 22px;
-  }
-
-
-  .feedback-form__footer {
-    align-items: stretch;
-
-    flex-direction:
-      column;
-  }
-
-
-  #feedback-submit {
-    width: 100%;
-  }
-
-}
+    </section>
+  </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
