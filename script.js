@@ -5726,3 +5726,541 @@
     }
   );
 })();
+
+/* ============================================================
+   MAZEDOCS FEEDBACK
+   ============================================================ */
+
+(() => {
+  "use strict";
+
+
+  /*
+   * Put your Formspree ID here.
+   *
+   * Example:
+   *
+   * https://formspree.io/f/xabcdefg
+   *
+   * becomes:
+   *
+   * xabcdefg
+   */
+
+  const FEEDBACK_FORM_ID =
+    "xgaeejow";
+
+
+  const FEEDBACK_ENDPOINT =
+    `https://formspree.io/f/${FEEDBACK_FORM_ID}`;
+
+
+  const launcher =
+    document.querySelector(
+      "#feedback-launcher"
+    );
+
+
+  const modal =
+    document.querySelector(
+      "#feedback-modal"
+    );
+
+
+  const closeButton =
+    document.querySelector(
+      "#feedback-close"
+    );
+
+
+  const form =
+    document.querySelector(
+      "#feedback-form"
+    );
+
+
+  const ratingInput =
+    document.querySelector(
+      "#feedback-rating"
+    );
+
+
+  const stars =
+    [
+      ...document.querySelectorAll(
+        ".feedback-star"
+      )
+    ];
+
+
+  const submitButton =
+    document.querySelector(
+      "#feedback-submit"
+    );
+
+
+  const status =
+    document.querySelector(
+      "#feedback-status"
+    );
+
+
+  if (
+    !launcher
+    ||
+    !modal
+    ||
+    !closeButton
+    ||
+    !form
+    ||
+    !ratingInput
+    ||
+    !submitButton
+    ||
+    !status
+  ) {
+    return;
+  }
+
+
+  let lastFocusedElement =
+    null;
+
+
+  /* ==========================================================
+     STATUS
+     ========================================================== */
+
+  function setStatus(
+    message,
+    type = ""
+  ) {
+
+    status.textContent =
+      message;
+
+
+    status.className =
+      "feedback-status";
+
+
+    if (type) {
+
+      status.classList.add(
+        `is-${type}`
+      );
+
+    }
+
+  }
+
+
+  /* ==========================================================
+     STARS
+     ========================================================== */
+
+  function updateStars(
+    value = 0
+  ) {
+
+    stars.forEach(
+      (star) => {
+
+        const starValue =
+          Number(
+            star.dataset.rating
+          );
+
+
+        const active =
+          starValue <= value;
+
+
+        star.classList.toggle(
+          "is-active",
+          active
+        );
+
+
+        star.setAttribute(
+          "aria-pressed",
+          active
+            ? "true"
+            : "false"
+        );
+
+      }
+    );
+
+  }
+
+
+  /* ==========================================================
+     OPEN / CLOSE
+     ========================================================== */
+
+  function openFeedback() {
+
+    lastFocusedElement =
+      document.activeElement;
+
+
+    modal.hidden =
+      false;
+
+
+    setStatus(
+      ""
+    );
+
+
+    window.setTimeout(
+      () => {
+
+        closeButton.focus();
+
+      },
+      0
+    );
+
+  }
+
+
+  function closeFeedback() {
+
+    modal.hidden =
+      true;
+
+
+    setStatus(
+      ""
+    );
+
+
+    if (
+      lastFocusedElement
+      instanceof HTMLElement
+    ) {
+
+      lastFocusedElement.focus();
+
+    }
+
+  }
+
+
+  launcher.addEventListener(
+    "click",
+    openFeedback
+  );
+
+
+  closeButton.addEventListener(
+    "click",
+    closeFeedback
+  );
+
+
+  /*
+   * Clicking the dark area outside
+   * the form closes the feedback window.
+   */
+
+  modal.addEventListener(
+    "click",
+    (event) => {
+
+      if (
+        event.target === modal
+      ) {
+
+        closeFeedback();
+
+      }
+
+    }
+  );
+
+
+  /*
+   * ESC also closes it.
+   */
+
+  document.addEventListener(
+    "keydown",
+    (event) => {
+
+      if (
+        event.key === "Escape"
+        &&
+        !modal.hidden
+      ) {
+
+        closeFeedback();
+
+      }
+
+    }
+  );
+
+
+  /* ==========================================================
+     RATING
+     ========================================================== */
+
+  stars.forEach(
+    (star) => {
+
+      star.addEventListener(
+        "click",
+        () => {
+
+          const value =
+            Number(
+              star.dataset.rating
+            );
+
+
+          ratingInput.value =
+            String(
+              value
+            );
+
+
+          updateStars(
+            value
+          );
+
+
+          setStatus(
+            ""
+          );
+
+        }
+      );
+
+    }
+  );
+
+
+  /* ==========================================================
+     SEND FEEDBACK
+     ========================================================== */
+
+  form.addEventListener(
+    "submit",
+    async (event) => {
+
+      event.preventDefault();
+
+
+      /*
+       * Prevent accidental deployment
+       * before Formspree is configured.
+       */
+
+      if (
+        FEEDBACK_FORM_ID ===
+        "YOUR_FORM_ID"
+      ) {
+
+        setStatus(
+          "Add your Formspree form ID in script.js first.",
+          "error"
+        );
+
+
+        return;
+      }
+
+
+      /*
+       * Require a rating.
+       */
+
+      if (
+        !ratingInput.value
+      ) {
+
+        setStatus(
+          "Choose a star rating first.",
+          "error"
+        );
+
+
+        return;
+      }
+
+
+      /*
+       * Run normal browser validation
+       * for message, email, etc.
+       */
+
+      if (
+        !form.reportValidity()
+      ) {
+
+        return;
+
+      }
+
+
+      const originalButtonText =
+        submitButton.textContent;
+
+
+      submitButton.disabled =
+        true;
+
+
+      submitButton.textContent =
+        "Sending…";
+
+
+      setStatus(
+        "Sending your feedback…"
+      );
+
+
+      /*
+       * Collect every named field
+       * from the feedback form.
+       */
+
+      const formData =
+        new FormData(
+          form
+        );
+
+
+      /*
+       * Useful when you receive
+       * the email so you know which
+       * MazeDocs page submitted it.
+       */
+
+      formData.append(
+        "page",
+        window.location.href
+      );
+
+
+      try {
+
+        const response =
+          await fetch(
+            FEEDBACK_ENDPOINT,
+            {
+
+              method:
+                "POST",
+
+              body:
+                formData,
+
+              headers: {
+                Accept:
+                  "application/json"
+              }
+
+            }
+          );
+
+
+        if (
+          !response.ok
+        ) {
+
+          const data =
+            await response
+              .json()
+              .catch(
+                () => ({})
+              );
+
+
+          const message =
+            data
+              ?.errors
+              ?.[0]
+              ?.message
+            ||
+            "Could not send feedback. Please try again.";
+
+
+          throw new Error(
+            message
+          );
+
+        }
+
+
+        /*
+         * Success.
+         */
+
+        form.reset();
+
+
+        ratingInput.value =
+          "";
+
+
+        updateStars(
+          0
+        );
+
+
+        setStatus(
+          "Thanks — your feedback was sent!",
+          "success"
+        );
+
+
+        /*
+         * Close after showing success.
+         */
+
+        window.setTimeout(
+          () => {
+
+            closeFeedback();
+
+          },
+          1400
+        );
+
+      }
+      catch (error) {
+
+        console.error(
+          "MazeDocs feedback error:",
+          error
+        );
+
+
+        setStatus(
+          error.message
+          ||
+          "Could not send feedback. Please try again.",
+          "error"
+        );
+
+      }
+      finally {
+
+        submitButton.disabled =
+          false;
+
+
+        submitButton.textContent =
+          originalButtonText;
+
+      }
+
+    }
+  );
+
+})();
