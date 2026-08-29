@@ -5718,13 +5718,18 @@
 
   clearConverter();
 
-  checkApi().then(
-    () => {
-      if (state.file) {
-        populateTargets();
-      }
-    }
-  );
+  /*
+ * Railway Docker image already includes LibreOffice.
+ * Do not expose a public health request on page load.
+ */
+setEngineStatus(
+  true,
+  true
+);
+
+if (state.file) {
+  populateTargets();
+}
 })();
 
 /* ============================================================
