@@ -3779,13 +3779,47 @@
     const sourcePoints =
       normalized.map(
         (point) => ({
-          x: point.x * work.canvas.width,
-          y: point.y * work.canvas.height
+          x: point.x * (work.canvas.width - 1),
+          y: point.y * (work.canvas.height - 1)
         })
       );
 
 
-    const outputWidth =
+    const polygonArea =
+      Math.abs(
+        sourcePoints.reduce(
+          (sum, point, index) => {
+            const next =
+              sourcePoints[
+                (index + 1)
+                % sourcePoints.length
+              ];
+
+
+            return sum +
+              point.x * next.y -
+              next.x * point.y;
+          },
+          0
+        ) / 2
+      );
+
+
+    if (
+      !Number.isFinite(polygonArea)
+      || polygonArea <
+        work.canvas.width
+        * work.canvas.height
+        * 0.004
+    ) {
+      return cropCanvasToBounds(
+        work.canvas,
+        normalized
+      );
+    }
+
+
+    let outputWidth =
       Math.max(
         32,
         Math.round(
@@ -3803,7 +3837,7 @@
       );
 
 
-    const outputHeight =
+    let outputHeight =
       Math.max(
         32,
         Math.round(
@@ -3821,127 +3855,480 @@
       );
 
 
-    try {
-      const cv =
-        await loadOpenCv();
-
-
-      const src =
-        cv.imread(
-          work.canvas
-        );
-
-
-      const dst =
-        new cv.Mat();
-
-
-      const sourceMatrix =
-        cv.matFromArray(
-          4,
-          1,
-          cv.CV_32FC2,
-          sourcePoints.flatMap(
-            (point) => [
-              point.x,
-              point.y
-            ]
-          )
-        );
-
-
-      const destinationMatrix =
-        cv.matFromArray(
-          4,
-          1,
-          cv.CV_32FC2,
-          [
-            0,
-            0,
-            outputWidth - 1,
-            0,
-            outputWidth - 1,
-            outputHeight - 1,
-            0,
-            outputHeight - 1
-          ]
-        );
-
-
-      const transform =
-        cv.getPerspectiveTransform(
-          sourceMatrix,
-          destinationMatrix
-        );
-
-
-      cv.warpPerspective(
-        src,
-        dst,
-        transform,
-        new cv.Size(
-          outputWidth,
-          outputHeight
-        ),
-        cv.INTER_CUBIC,
-        cv.BORDER_REPLICATE,
-        new cv.Scalar()
+    /*
+     * Keep the perspective operation bounded. Phone photographs can decode to
+     * extremely large canvases; allowing a crop to create an even larger
+     * destination is one of the easiest ways to exhaust browser memory.
+     */
+    const sourceMaxSide =
+      Math.max(
+        work.canvas.width,
+        work.canvas.height
       );
 
 
-      const output =
-        document.createElement(
-          "canvas"
-        );
+    const maximumPixels =
+      7000000;
 
 
-      output.width =
-        outputWidth;
+    const requestedPixels =
+      outputWidth
+      * outputHeight;
 
 
-      output.height =
-        outputHeight;
-
-
-      cv.imshow(
-        output,
-        dst
-      );
-
-
-      src.delete();
-      dst.delete();
-      sourceMatrix.delete();
-      destinationMatrix.delete();
-      transform.delete();
-
-
-      return {
-        canvas: output,
-        context:
-          output.getContext(
-            "2d",
-            {
-              alpha: true,
-              willReadFrequently: true
-            }
+    const outputScale =
+      Math.min(
+        1,
+        sourceMaxSide /
+          Math.max(
+            outputWidth,
+            outputHeight
           ),
-        width: outputWidth,
-        height: outputHeight
-      };
-    }
-    catch (error) {
-      console.warn(
-        "MazeDocs perspective crop fallback:",
-        error
+        requestedPixels > maximumPixels
+          ? Math.sqrt(
+              maximumPixels /
+              requestedPixels
+            )
+          : 1
       );
 
 
+    outputWidth =
+      Math.max(
+        32,
+        Math.round(
+          outputWidth
+          * outputScale
+        )
+      );
+
+
+    outputHeight =
+      Math.max(
+        32,
+        Math.round(
+          outputHeight
+          * outputScale
+        )
+      );
+
+
+    const sourceContext =
+      work.canvas.getContext(
+        "2d",
+        {
+          alpha: true,
+          willReadFrequently: true
+        }
+      );
+
+
+    if (
+      !sourceContext
+    ) {
       return cropCanvasToBounds(
         work.canvas,
         normalized
       );
     }
+
+
+    const sourceImage =
+      sourceContext.getImageData(
+        0,
+        0,
+        work.canvas.width,
+        work.canvas.height
+      );
+
+
+    const output =
+      document.createElement(
+        "canvas"
+      );
+
+
+    output.width =
+      outputWidth;
+
+
+    output.height =
+      outputHeight;
+
+
+    const outputContext =
+      output.getContext(
+        "2d",
+        {
+          alpha: true,
+          willReadFrequently: true
+        }
+      );
+
+
+    if (
+      !outputContext
+    ) {
+      return cropCanvasToBounds(
+        work.canvas,
+        normalized
+      );
+    }
+
+
+    const destinationImage =
+      outputContext.createImageData(
+        outputWidth,
+        outputHeight
+      );
+
+
+    const sourceData =
+      sourceImage.data;
+
+
+    const destinationData =
+      destinationImage.data;
+
+
+    const sourceWidth =
+      work.canvas.width;
+
+
+    const sourceHeight =
+      work.canvas.height;
+
+
+    const p0 = sourcePoints[0];
+    const p1 = sourcePoints[1];
+    const p2 = sourcePoints[2];
+    const p3 = sourcePoints[3];
+
+
+    /*
+     * Projective square -> quadrilateral coefficients. This performs the same
+     * kind of four-corner straightening as the previous OpenCV path, but it
+     * stays inside normal browser memory instead of starting a large WASM heap.
+     */
+    const dx1 = p1.x - p2.x;
+    const dx2 = p3.x - p2.x;
+    const dx3 = p0.x - p1.x + p2.x - p3.x;
+    const dy1 = p1.y - p2.y;
+    const dy2 = p3.y - p2.y;
+    const dy3 = p0.y - p1.y + p2.y - p3.y;
+
+
+    let g = 0;
+    let h = 0;
+
+
+    const divisor =
+      dx1 * dy2 -
+      dx2 * dy1;
+
+
+    if (
+      Math.abs(dx3) > 0.00001
+      || Math.abs(dy3) > 0.00001
+    ) {
+      if (
+        Math.abs(divisor) < 0.00001
+      ) {
+        return cropCanvasToBounds(
+          work.canvas,
+          normalized
+        );
+      }
+
+
+      g =
+        (
+          dx3 * dy2 -
+          dx2 * dy3
+        ) /
+        divisor;
+
+
+      h =
+        (
+          dx1 * dy3 -
+          dx3 * dy1
+        ) /
+        divisor;
+    }
+
+
+    const a =
+      p1.x - p0.x +
+      g * p1.x;
+
+
+    const b =
+      p3.x - p0.x +
+      h * p3.x;
+
+
+    const c = p0.x;
+
+
+    const d =
+      p1.y - p0.y +
+      g * p1.y;
+
+
+    const e =
+      p3.y - p0.y +
+      h * p3.y;
+
+
+    const f = p0.y;
+
+
+    const useBilinear =
+      outputWidth
+      * outputHeight <=
+      2200000;
+
+
+    const maxSourceX =
+      sourceWidth - 1;
+
+
+    const maxSourceY =
+      sourceHeight - 1;
+
+
+    for (
+      let y = 0;
+      y < outputHeight;
+      y += 1
+    ) {
+      const v =
+        outputHeight > 1
+          ? y /
+            (outputHeight - 1)
+          : 0;
+
+
+      for (
+        let x = 0;
+        x < outputWidth;
+        x += 1
+      ) {
+        const u =
+          outputWidth > 1
+            ? x /
+              (outputWidth - 1)
+            : 0;
+
+
+        const denominator =
+          g * u +
+          h * v +
+          1;
+
+
+        if (
+          Math.abs(denominator) <
+          0.000001
+        ) {
+          continue;
+        }
+
+
+        const sourceX =
+          Math.max(
+            0,
+            Math.min(
+              maxSourceX,
+              (
+                a * u +
+                b * v +
+                c
+              ) /
+              denominator
+            )
+          );
+
+
+        const sourceY =
+          Math.max(
+            0,
+            Math.min(
+              maxSourceY,
+              (
+                d * u +
+                e * v +
+                f
+              ) /
+              denominator
+            )
+          );
+
+
+        const destinationIndex =
+          (
+            y * outputWidth +
+            x
+          ) * 4;
+
+
+        if (
+          !useBilinear
+        ) {
+          const nearestX =
+            Math.round(sourceX);
+
+
+          const nearestY =
+            Math.round(sourceY);
+
+
+          const sourceIndex =
+            (
+              nearestY * sourceWidth +
+              nearestX
+            ) * 4;
+
+
+          destinationData[destinationIndex] =
+            sourceData[sourceIndex];
+
+
+          destinationData[destinationIndex + 1] =
+            sourceData[sourceIndex + 1];
+
+
+          destinationData[destinationIndex + 2] =
+            sourceData[sourceIndex + 2];
+
+
+          destinationData[destinationIndex + 3] =
+            sourceData[sourceIndex + 3];
+
+
+          continue;
+        }
+
+
+        const x0 =
+          Math.floor(sourceX);
+
+
+        const y0 =
+          Math.floor(sourceY);
+
+
+        const x1 =
+          Math.min(
+            maxSourceX,
+            x0 + 1
+          );
+
+
+        const y1 =
+          Math.min(
+            maxSourceY,
+            y0 + 1
+          );
+
+
+        const fx =
+          sourceX - x0;
+
+
+        const fy =
+          sourceY - y0;
+
+
+        const topLeft =
+          (y0 * sourceWidth + x0) * 4;
+
+
+        const topRight =
+          (y0 * sourceWidth + x1) * 4;
+
+
+        const bottomLeft =
+          (y1 * sourceWidth + x0) * 4;
+
+
+        const bottomRight =
+          (y1 * sourceWidth + x1) * 4;
+
+
+        const topWeight =
+          1 - fy;
+
+
+        const leftWeight =
+          1 - fx;
+
+
+        for (
+          let channel = 0;
+          channel < 4;
+          channel += 1
+        ) {
+          destinationData[
+            destinationIndex + channel
+          ] =
+            sourceData[
+              topLeft + channel
+            ] *
+              leftWeight *
+              topWeight +
+            sourceData[
+              topRight + channel
+            ] *
+              fx *
+              topWeight +
+            sourceData[
+              bottomLeft + channel
+            ] *
+              leftWeight *
+              fy +
+            sourceData[
+              bottomRight + channel
+            ] *
+              fx *
+              fy;
+        }
+      }
+
+
+      /*
+       * Yield periodically so a large crop cannot lock the UI thread for one
+       * long uninterrupted task. Preview crops are small enough that this is
+       * effectively instant; export crops remain responsive.
+       */
+      if (
+        y > 0
+        && y % 64 === 0
+      ) {
+        await new Promise(
+          (resolve) =>
+            requestAnimationFrame(
+              resolve
+            )
+        );
+      }
+    }
+
+
+    outputContext.putImageData(
+      destinationImage,
+      0,
+      0
+    );
+
+
+    return {
+      canvas: output,
+      context: outputContext,
+      width: outputWidth,
+      height: outputHeight
+    };
   }
 
 
@@ -4573,10 +4960,11 @@
 
 
   async function detectDocumentCropQuad(file) {
-    const cv =
-      await loadOpenCv();
-
-
+    /*
+     * Lightweight edge estimate used only as a starting point for the manual
+     * four-corner crop. Keeping this outside OpenCV avoids allocating a WASM
+     * heap merely to open the crop tool on lower-memory laptops and phones.
+     */
     const image =
       await loadImageElement(
         file
@@ -4586,204 +4974,294 @@
     const work =
       createWorkingCanvas(
         image,
-        1200
+        520
       );
 
 
-    const mats = [];
+    const context =
+      work.canvas.getContext(
+        "2d",
+        {
+          alpha: false,
+          willReadFrequently: true
+        }
+      );
 
 
-    try {
-      const src =
-        cv.imread(
-          work.canvas
+    if (
+      !context
+    ) {
+      return null;
+    }
+
+
+    const imageData =
+      context.getImageData(
+        0,
+        0,
+        work.width,
+        work.height
+      );
+
+
+    const data =
+      imageData.data;
+
+
+    const width =
+      work.width;
+
+
+    const height =
+      work.height;
+
+
+    const gray =
+      new Uint8Array(
+        width * height
+      );
+
+
+    for (
+      let index = 0;
+      index < gray.length;
+      index += 1
+    ) {
+      const offset =
+        index * 4;
+
+
+      gray[index] =
+        Math.round(
+          data[offset] * 0.299 +
+          data[offset + 1] * 0.587 +
+          data[offset + 2] * 0.114
         );
+    }
 
 
-      const gray =
-        new cv.Mat();
+    let gradientTotal = 0;
+    let gradientSquared = 0;
+    let gradientCount = 0;
 
 
-      const blurred =
-        new cv.Mat();
+    const gradients = [];
 
 
-      const edges =
-        new cv.Mat();
-
-
-      const contours =
-        new cv.MatVector();
-
-
-      const hierarchy =
-        new cv.Mat();
-
-
-      mats.push(
-        src,
-        gray,
-        blurred,
-        edges,
-        contours,
-        hierarchy
-      );
-
-
-      cv.cvtColor(
-        src,
-        gray,
-        cv.COLOR_RGBA2GRAY
-      );
-
-
-      cv.GaussianBlur(
-        gray,
-        blurred,
-        new cv.Size(5, 5),
-        0,
-        0,
-        cv.BORDER_DEFAULT
-      );
-
-
-      cv.Canny(
-        blurred,
-        edges,
-        45,
-        135
-      );
-
-
-      cv.findContours(
-        edges,
-        contours,
-        hierarchy,
-        cv.RETR_LIST,
-        cv.CHAIN_APPROX_SIMPLE
-      );
-
-
-      const minimumArea =
-        work.width
-        * work.height
-        * 0.12;
-
-
-      let bestArea =
-        0;
-
-
-      let bestPoints =
-        null;
-
-
+    for (
+      let y = 2;
+      y < height - 2;
+      y += 2
+    ) {
       for (
-        let index = 0;
-        index < contours.size();
-        index += 1
+        let x = 2;
+        x < width - 2;
+        x += 2
       ) {
-        const contour =
-          contours.get(index);
+        const center =
+          y * width + x;
 
 
-        const area =
+        const gx =
           Math.abs(
-            cv.contourArea(
-              contour,
-              false
-            )
+            gray[center + 1] -
+            gray[center - 1]
           );
 
 
-        if (
-          area < minimumArea
-          || area <= bestArea
-        ) {
-          contour.delete();
-
-          continue;
-        }
-
-
-        const perimeter =
-          cv.arcLength(
-            contour,
-            true
+        const gy =
+          Math.abs(
+            gray[center + width] -
+            gray[center - width]
           );
 
 
-        const approximation =
-          new cv.Mat();
+        const magnitude =
+          gx + gy;
 
 
-        cv.approxPolyDP(
-          contour,
-          approximation,
-          perimeter * 0.025,
-          true
-        );
+        gradients.push([
+          x,
+          y,
+          magnitude
+        ]);
 
 
-        if (
-          approximation.rows === 4
-          && approximation.data32S?.length >= 8
-        ) {
-          const raw =
-            approximation.data32S;
+        gradientTotal +=
+          magnitude;
 
 
-          const points = [];
+        gradientSquared +=
+          magnitude * magnitude;
 
 
-          for (
-            let pointIndex = 0;
-            pointIndex < 4;
-            pointIndex += 1
-          ) {
-            points.push({
-              x:
-                raw[pointIndex * 2]
-                /
-                work.width,
-              y:
-                raw[pointIndex * 2 + 1]
-                /
-                work.height
-            });
-          }
-
-
-          bestArea =
-            area;
-
-
-          bestPoints =
-            orderCropPoints(
-              points
-            );
-        }
-
-
-        approximation.delete();
-        contour.delete();
+        gradientCount += 1;
       }
-
-
-      return bestPoints;
     }
-    finally {
-      mats.forEach(
-        (mat) => {
-          try {
-            mat?.delete?.();
-          }
-          catch (error) {
-            /* Ignore OpenCV cleanup errors. */
-          }
-        }
+
+
+    if (
+      !gradientCount
+    ) {
+      return null;
+    }
+
+
+    const mean =
+      gradientTotal /
+      gradientCount;
+
+
+    const variance =
+      Math.max(
+        0,
+        gradientSquared /
+          gradientCount -
+        mean * mean
       );
+
+
+    const threshold =
+      Math.max(
+        34,
+        mean +
+          Math.sqrt(variance) *
+          1.15
+      );
+
+
+    const xs = [];
+    const ys = [];
+
+
+    gradients.forEach(
+      ([x, y, magnitude]) => {
+        if (
+          magnitude >= threshold
+        ) {
+          xs.push(x);
+          ys.push(y);
+        }
+      }
+    );
+
+
+    if (
+      xs.length < 80
+    ) {
+      return null;
     }
+
+
+    xs.sort(
+      (a, b) => a - b
+    );
+
+
+    ys.sort(
+      (a, b) => a - b
+    );
+
+
+    const percentile =
+      (values, p) =>
+        values[
+          Math.max(
+            0,
+            Math.min(
+              values.length - 1,
+              Math.round(
+                (values.length - 1) * p
+              )
+            )
+          )
+        ];
+
+
+    let left =
+      percentile(xs, 0.025);
+
+
+    let right =
+      percentile(xs, 0.975);
+
+
+    let top =
+      percentile(ys, 0.025);
+
+
+    let bottom =
+      percentile(ys, 0.975);
+
+
+    const expandX =
+      Math.max(
+        8,
+        (right - left) * 0.055
+      );
+
+
+    const expandY =
+      Math.max(
+        8,
+        (bottom - top) * 0.055
+      );
+
+
+    left =
+      Math.max(
+        0,
+        left - expandX
+      );
+
+
+    right =
+      Math.min(
+        width - 1,
+        right + expandX
+      );
+
+
+    top =
+      Math.max(
+        0,
+        top - expandY
+      );
+
+
+    bottom =
+      Math.min(
+        height - 1,
+        bottom + expandY
+      );
+
+
+    if (
+      right - left < width * 0.25
+      || bottom - top < height * 0.25
+    ) {
+      return null;
+    }
+
+
+    return [
+      {
+        x: left / width,
+        y: top / height
+      },
+      {
+        x: right / width,
+        y: top / height
+      },
+      {
+        x: right / width,
+        y: bottom / height
+      },
+      {
+        x: left / width,
+        y: bottom / height
+      }
+    ];
   }
 
 
